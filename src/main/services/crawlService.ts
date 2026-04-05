@@ -40,6 +40,8 @@ import {
   extractListingIds,
 } from './parserService.js';
 import type { ListingFromParse, ShopIndexData, SearchIndexData } from './parserService.js';
+import { getBulkListings, filterNewIds, getVkingConfig } from './vkingService.js';
+import { processBatch as processTrendBatch } from './trendService.js';
 
 // ─── Error types ───────────────────────────────────────────────────────────────
 
@@ -110,6 +112,71 @@ function updateCrawlJob(
           pages_crawled = COALESCE(?, pages_crawled)
       WHERE id = ?
     `).run(status, pagesCrawled ?? null, jobId);
+  }
+}
+
+// ─── Post-crawl: VK1ng analytics + trend classification ──────────────────────
+
+async function fetchAnalyticsAndClassify(
+  db: Database.Database,
+  listingIds: string[],
+  crawlJobId: number
+): Promise<{ fetched: number; hot: number; watch: number }> {
+  if (listingIds.length === 0) return { fetched: 0, hot: 0, watch: 0 };
+
+  // Check if VK1ng API key is configured
+  const config = getVkingConfig(db);
+  if (!config.apiKey) {
+    logger.warn('VK1ng API key not configured, skipping analytics fetch');
+    return { fetched: 0, hot: 0, watch: 0 };
+  }
+
+  try {
+    // Filter out IDs we already have recent analytics for (24h cache)
+    const cacheHours = parseInt(getSetting(db, 'vking_cache_hours', '24'));
+    const newIds = filterNewIds(db, listingIds, cacheHours);
+
+    if (newIds.length === 0) {
+      logger.info('All listing IDs already have recent analytics, skipping VK1ng fetch');
+      return { fetched: 0, hot: 0, watch: 0 };
+    }
+
+    logger.info('Fetching VK1ng analytics', { total: listingIds.length, newIds: newIds.length });
+
+    // Fetch analytics from VK1ng API
+    const analyticsData = await getBulkListings(db, newIds);
+
+    if (analyticsData.length === 0) {
+      logger.info('No analytics data returned from VK1ng');
+      return { fetched: 0, hot: 0, watch: 0 };
+    }
+
+    // Classify trends and save to listing_analytics
+    processTrendBatch(db, analyticsData, crawlJobId);
+
+    // Count HOT and WATCH
+    const hot = analyticsData.filter(d => {
+      const sold = d.sold ?? 0;
+      const days = d.original_creation_days ?? 999;
+      return sold >= 3 && days <= 60;
+    }).length;
+
+    const watch = analyticsData.filter(d => {
+      const sold = d.sold ?? 0;
+      const days = d.original_creation_days ?? 999;
+      if (sold >= 3 && days <= 60) return false; // already HOT
+      const views = d.views_24h ?? 0;
+      const hey = d.hey ?? 0;
+      return (sold >= 2) || (views >= 120) || (views >= 80 && hey >= 8) ||
+             (days <= 30 && hey >= 10 && views >= 40) || (sold >= 3 && days <= 90);
+    }).length;
+
+    logger.info('Analytics processed', { fetched: analyticsData.length, hot, watch });
+    return { fetched: analyticsData.length, hot, watch };
+  } catch (error) {
+    logger.error('Failed to fetch/process analytics', { error: (error as Error).message });
+    // Don't throw — analytics failure shouldn't fail the crawl
+    return { fetched: 0, hot: 0, watch: 0 };
   }
 }
 
@@ -358,14 +425,20 @@ export async function crawlShop(
     // 14. Update crawl job
     updateCrawlJob(db, job.id, 'completed', undefined, 1);
 
+    const listingIds = data.listings.map((l) => l.etsyListingId);
+
+    // 15. Fetch VK1ng analytics + classify trends
+    const analytics = await fetchAnalyticsAndClassify(db, listingIds, job.id);
+
     logger.info('Shop crawl completed', {
       shopId,
       shopName: shop.shop_name,
       listingsFound: data.listings.length,
+      analyticsResult: analytics,
     });
 
     return {
-      listingIds: data.listings.map((l) => l.etsyListingId),
+      listingIds,
       pagesProcessed: 1,
     };
   } catch (error) {
@@ -544,11 +617,15 @@ export async function crawlSearch(
     // Deduplicate listing IDs
     const uniqueIds = [...new Set(allListingIds)];
 
+    // Fetch VK1ng analytics + classify trends
+    const analytics = await fetchAnalyticsAndClassify(db, uniqueIds, job.id);
+
     logger.info('Search crawl completed', {
       keywordId,
       keyword: keyword.keyword,
       totalListings: uniqueIds.length,
       pagesProcessed: totalPagesProcessed,
+      analyticsResult: analytics,
     });
 
     return {

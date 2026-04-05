@@ -2,22 +2,28 @@ import { useState, useEffect } from 'react';
 import { useIPC } from '../hooks/useIPC';
 import TrendBadge from '../components/TrendBadge';
 
-interface TrendingListing {
+interface TrendingItem {
   id: number;
-  etsyListingId: string;
-  title: string;
-  imageUrl?: string | null;
-  shopName: string;
-  price: number;
-  sold24h: number;
-  views24h: number;
-  heyScore: number;
-  trendingScore: number;
-  trendStatus: 'HOT' | 'WATCH' | 'SKIP';
+  etsy_listing_id: string;
+  title: string | null;
+  image_url: string | null;
+  shop_name: string | null;
+  price: number | null;
+  sold_24h: number;
+  views_24h: number;
+  hey_score: number;
+  trending_score: number;
+  trend_status: 'HOT' | 'WATCH' | 'SKIP';
+  days_old: number;
+  total_sold: number;
+  conversion_rate: number;
+  tags: string;
+  qualified: number;
+  fetched_at: string;
 }
 
 interface TrendingResponse {
-  listings: TrendingListing[];
+  listings: TrendingItem[];
   total: number;
   page: number;
   pageSize: number;
@@ -33,26 +39,39 @@ export default function TrendingBoard() {
 
   useEffect(() => {
     invoke({ status: statusFilter === 'ALL' ? undefined : statusFilter, search, page, pageSize });
-  }, [statusFilter, search, page]);
+  }, [statusFilter, page]);
 
   const listings = data?.listings ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  // Client-side search filter (search is fast enough for <100 items)
+  const filtered = search
+    ? listings.filter(
+        (item) =>
+          (item.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
+          (item.shop_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
+          (item.tags ?? '').toLowerCase().includes(search.toLowerCase())
+      )
+    : listings;
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <h1 className="text-2xl font-bold text-gray-100">Trending Board</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-100">Trending Board</h1>
+        <span className="text-sm text-gray-500">{total} trending listings</span>
+      </div>
 
       {/* Filter bar */}
       <div className="flex items-center gap-4">
         <select
           value={statusFilter}
           onChange={(e) => {
-            setStatusFilter(e.target.value as any);
+            setStatusFilter(e.target.value as 'ALL' | 'HOT' | 'WATCH');
             setPage(1);
           }}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
         >
           <option value="ALL">All Statuses</option>
           <option value="HOT">HOT Only</option>
@@ -61,13 +80,10 @@ export default function TrendingBoard() {
 
         <input
           type="text"
-          placeholder="Search listings..."
+          placeholder="Search by title, shop, or tags..."
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
         />
       </div>
 
@@ -88,20 +104,20 @@ export default function TrendingBoard() {
             </tr>
           </thead>
           <tbody>
-            {loading && listings.length === 0 ? (
+            {loading && filtered.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
                   Loading...
                 </td>
               </tr>
-            ) : listings.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
-                  No trending listings found. Start tracking shops and keywords to discover trends.
+                  No trending listings found. Crawl keywords or shops to discover trends.
                 </td>
               </tr>
             ) : (
-              listings.map((item, idx) => (
+              filtered.map((item, idx) => (
                 <tr
                   key={item.id}
                   className={`border-t border-gray-800 hover:bg-gray-800/50 transition-colors ${
@@ -114,41 +130,48 @@ export default function TrendingBoard() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded bg-gray-800 flex-shrink-0 overflow-hidden">
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                        {item.image_url ? (
+                          <img src={item.image_url} alt="" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs">
                             N/A
                           </div>
                         )}
                       </div>
-                      <span className="text-sm text-gray-200 truncate max-w-xs">{item.title}</span>
+                      <div className="min-w-0">
+                        <div className="text-sm text-gray-200 truncate max-w-xs">
+                          {item.title || `Listing #${item.etsy_listing_id}`}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {item.days_old}d old · {item.total_sold} total sold
+                        </div>
+                      </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-400">{item.shopName}</td>
+                  <td className="px-4 py-3 text-sm text-gray-400">{item.shop_name || '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-100 text-right font-medium">
-                    ${item.price.toFixed(2)}
+                    ${(item.price ?? 0).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-sm text-right">
-                    <span className={item.sold24h >= 3 ? 'text-green-400 font-medium' : 'text-gray-400'}>
-                      {item.sold24h}
+                    <span className={item.sold_24h >= 3 ? 'text-green-400 font-medium' : 'text-gray-400'}>
+                      {item.sold_24h}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-right">
-                    <span className={item.views24h >= 120 ? 'text-green-400 font-medium' : 'text-gray-400'}>
-                      {item.views24h}
+                    <span className={item.views_24h >= 120 ? 'text-green-400 font-medium' : 'text-gray-400'}>
+                      {item.views_24h}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-right">
-                    <span className={item.heyScore >= 8 ? 'text-green-400 font-medium' : 'text-gray-400'}>
-                      {item.heyScore}
+                    <span className={item.hey_score >= 8 ? 'text-green-400 font-medium' : 'text-gray-400'}>
+                      {item.hey_score}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-indigo-400 text-right font-medium">
-                    {item.trendingScore.toFixed(1)}
+                    {item.trending_score.toFixed(1)}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <TrendBadge status={item.trendStatus} />
+                    <TrendBadge status={item.trend_status} />
                   </td>
                 </tr>
               ))
@@ -158,30 +181,32 @@ export default function TrendingBoard() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
-          Showing {listings.length} of {total} listings
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-gray-400">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Next
-          </button>
+      {total > pageSize && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            Showing {filtered.length} of {total} listings
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-400">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
