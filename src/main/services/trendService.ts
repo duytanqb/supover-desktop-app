@@ -127,7 +127,7 @@ export function processBatch(db: Database.Database, listings: VkingListingData[]
         });
 
         const listingRow = findListingStmt.get(etsyId) as { id: number } | undefined;
-        const listingId = listingRow?.id ?? 0;
+        const listingId = listingRow?.id ?? null;
 
         insertStmt.run(
           listingId,

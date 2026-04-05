@@ -166,7 +166,7 @@ const migrations: Migration[] = [
       -- Listing analytics (VK1ng data)
       CREATE TABLE IF NOT EXISTS listing_analytics (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
-        listing_id        INTEGER NOT NULL REFERENCES listings(id),
+        listing_id        INTEGER REFERENCES listings(id),
         etsy_listing_id   TEXT NOT NULL,
         sold_24h          REAL DEFAULT 0,
         views_24h         REAL DEFAULT 0,
@@ -342,6 +342,45 @@ const migrations: Migration[] = [
         ('snapshot_retention_days', '90'),
         ('html_cache_retention_days', '7'),
         ('theme', 'dark');
+    `,
+  },
+  {
+    version: 3,
+    name: 'make_listing_analytics_listing_id_nullable',
+    sql: `
+      -- Recreate listing_analytics with nullable listing_id
+      -- (SQLite doesn't support ALTER COLUMN, so recreate the table)
+      CREATE TABLE IF NOT EXISTS listing_analytics_new (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        listing_id        INTEGER REFERENCES listings(id),
+        etsy_listing_id   TEXT NOT NULL,
+        sold_24h          REAL DEFAULT 0,
+        views_24h         REAL DEFAULT 0,
+        hey_score         REAL DEFAULT 0,
+        days_old          REAL DEFAULT 0,
+        total_sold        INTEGER DEFAULT 0,
+        estimated_revenue TEXT,
+        conversion_rate   REAL DEFAULT 0,
+        num_favorers      INTEGER DEFAULT 0,
+        daily_views       REAL DEFAULT 0,
+        total_views       INTEGER DEFAULT 0,
+        trending_score    REAL DEFAULT 0,
+        trend_status      TEXT DEFAULT 'SKIP',
+        qualified         INTEGER DEFAULT 0,
+        qualified_by      TEXT,
+        tags              TEXT,
+        categories        TEXT,
+        shop_country      TEXT,
+        shop_sold         INTEGER,
+        fetched_at        TEXT DEFAULT (datetime('now')),
+        crawl_job_id      INTEGER REFERENCES crawl_jobs(id)
+      );
+      INSERT OR IGNORE INTO listing_analytics_new SELECT * FROM listing_analytics;
+      DROP TABLE IF EXISTS listing_analytics;
+      ALTER TABLE listing_analytics_new RENAME TO listing_analytics;
+      CREATE INDEX IF NOT EXISTS idx_analytics_listing ON listing_analytics(listing_id, fetched_at);
+      CREATE INDEX IF NOT EXISTS idx_analytics_trend ON listing_analytics(trend_status, trending_score);
+      CREATE INDEX IF NOT EXISTS idx_analytics_etsy_id ON listing_analytics(etsy_listing_id);
     `,
   },
 ];
