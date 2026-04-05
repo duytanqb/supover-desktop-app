@@ -45,15 +45,21 @@ export default function TrendingBoard() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // Client-side search filter (search is fast enough for <100 items)
   const filtered = search
     ? listings.filter(
         (item) =>
           (item.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
           (item.shop_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
+          (item.etsy_listing_id ?? '').includes(search) ||
           (item.tags ?? '').toLowerCase().includes(search.toLowerCase())
       )
     : listings;
+
+  const openListing = (etsyListingId: string) => {
+    window.electron.ipcRenderer.invoke('shell:open-external', `https://www.etsy.com/listing/${etsyListingId}`);
+    // Fallback: open via window.open if shell handler doesn't exist
+    window.open(`https://www.etsy.com/listing/${etsyListingId}`, '_blank');
+  };
 
   return (
     <div className="space-y-6">
@@ -80,7 +86,7 @@ export default function TrendingBoard() {
 
         <input
           type="text"
-          placeholder="Search by title, shop, or tags..."
+          placeholder="Search by title, shop, listing ID, or tags..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
@@ -93,7 +99,8 @@ export default function TrendingBoard() {
           <thead>
             <tr className="bg-gray-800">
               <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium w-10">#</th>
-              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Listing</th>
+              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Listing ID</th>
+              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Title</th>
               <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Shop</th>
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Price</th>
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Sold 24h</th>
@@ -106,13 +113,13 @@ export default function TrendingBoard() {
           <tbody>
             {loading && filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 text-sm">
                   Loading...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 text-sm">
                   No trending listings found. Crawl keywords or shops to discover trends.
                 </td>
               </tr>
@@ -128,23 +135,25 @@ export default function TrendingBoard() {
                     {(page - 1) * pageSize + idx + 1}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded bg-gray-800 flex-shrink-0 overflow-hidden">
-                        {item.image_url ? (
-                          <img src={item.image_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs">
-                            N/A
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm text-gray-200 truncate max-w-xs">
-                          {item.title || `Listing #${item.etsy_listing_id}`}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {item.days_old}d old · {item.total_sold} total sold
-                        </div>
+                    <button
+                      onClick={() => openListing(item.etsy_listing_id)}
+                      className="text-sm text-indigo-400 hover:text-indigo-300 hover:underline font-mono transition-colors"
+                      title={`Open listing ${item.etsy_listing_id} on Etsy`}
+                    >
+                      {item.etsy_listing_id}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="min-w-0">
+                      <button
+                        onClick={() => openListing(item.etsy_listing_id)}
+                        className="text-sm text-gray-200 hover:text-indigo-300 hover:underline truncate max-w-xs block text-left transition-colors"
+                        title={item.title || undefined}
+                      >
+                        {item.title || `Listing #${item.etsy_listing_id}`}
+                      </button>
+                      <div className="text-xs text-gray-500">
+                        {item.days_old}d old · {item.total_sold} total sold
                       </div>
                     </div>
                   </td>

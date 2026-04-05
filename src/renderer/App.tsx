@@ -5,7 +5,6 @@ import TrendingBoard from './pages/TrendingBoard';
 import ShopList from './pages/ShopList';
 import ShopDetail from './pages/ShopDetail';
 import SearchTracker from './pages/SearchTracker';
-import Alerts from './pages/Alerts';
 import AIInsights from './pages/AIInsights';
 import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
@@ -26,7 +25,6 @@ export default function App() {
                 <Route path="/shops" element={<ShopList />} />
                 <Route path="/shops/:id" element={<ShopDetail />} />
                 <Route path="/keywords" element={<SearchTracker />} />
-                <Route path="/alerts" element={<Alerts />} />
                 <Route path="/ai-insights" element={<AIInsights />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>

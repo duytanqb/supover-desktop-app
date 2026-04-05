@@ -6,25 +6,17 @@ interface CrawlStatus {
   jobsInQueue: number;
 }
 
-interface UnreadCount {
-  count: number;
-}
-
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: '\u25A6' },
-  { to: '/trending', label: 'Trending', icon: '\uD83D\uDD25' },
-  { to: '/shops', label: 'Shops', icon: '\uD83C\uDFEA' },
-  { to: '/keywords', label: 'Keywords', icon: '\uD83D\uDD0D' },
-  { to: '/alerts', label: 'Alerts', icon: '\uD83D\uDD14' },
-  { to: '/ai-insights', label: 'AI Insights', icon: '\u2728' },
-  { to: '/settings', label: 'Settings', icon: '\u2699\uFE0F' },
+  { to: '/', label: 'Dashboard', icon: '📊' },
+  { to: '/trending', label: 'Trending', icon: '🔥' },
+  { to: '/shops', label: 'Shops', icon: '🏪' },
+  { to: '/keywords', label: 'Keywords', icon: '🔍' },
+  { to: '/ai-insights', label: 'AI Insights', icon: '✨' },
+  { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
 export default function Sidebar() {
   const { data: crawlStatus } = usePolling<CrawlStatus>('crawl:status', 10_000);
-  const { data: unreadData } = usePolling<UnreadCount>('alert:count-unread', 15_000);
-
-  const unreadCount = unreadData?.count ?? 0;
 
   const statusColor = {
     running: 'bg-green-500',
@@ -45,7 +37,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-800">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">\uD83D\uDD0D</span>
+          <span className="text-2xl">🚀</span>
           <h1 className="text-lg font-bold text-gray-100 tracking-tight">Supover App</h1>
         </div>
       </div>
@@ -67,11 +59,6 @@ export default function Sidebar() {
           >
             <span className="text-base w-5 text-center">{item.icon}</span>
             <span>{item.label}</span>
-            {item.to === '/alerts' && unreadCount > 0 && (
-              <span className="ml-auto bg-indigo-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
           </NavLink>
         ))}
       </nav>
