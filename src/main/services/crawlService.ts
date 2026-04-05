@@ -12,7 +12,7 @@
 
 import Database from 'better-sqlite3';
 import { logger } from '../utils/logger.js';
-import { randomDelay, scrollPage } from '../utils/humanize.js';
+import { randomDelay } from '../utils/humanize.js';
 import {
   launchPersistentContext,
   closeContext,
@@ -330,10 +330,7 @@ export async function crawlShop(
       throw new BlockedError(shop.shop_name);
     }
 
-    // 10. Scroll to trigger lazy load
-    await scrollPage(page);
-
-    // 11. Save HTML to disk BEFORE parsing (CRITICAL RULE)
+    // 10. Save HTML to disk BEFORE parsing (CRITICAL RULE)
     const htmlContent = await page.content();
     const cacheRecord = saveHtml(db, {
       pageType: 'shop_index',
@@ -495,9 +492,6 @@ export async function crawlSearch(
         updateCrawlJob(db, job.id, 'blocked', 'Page blocked by Etsy', totalPagesProcessed);
         throw new BlockedError(`${keyword.keyword} page ${pageNum}`);
       }
-
-      // Scroll for lazy load
-      await scrollPage(page);
 
       // Save HTML BEFORE parsing (CRITICAL RULE)
       const htmlContent = await page.content();
