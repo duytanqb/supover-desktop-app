@@ -63,6 +63,7 @@ export default function SearchTracker() {
   const { data: keywords, invoke: loadKeywords, loading } = useIPC<Keyword[]>('keyword:list');
   const { invoke: addKeyword } = useIPC('keyword:add');
   const { invoke: crawlKeyword } = useIPC('keyword:crawl-now');
+  const { invoke: deleteKeyword } = useIPC('keyword:delete');
   const { data: searchResults, invoke: loadSearchResults } = useIPC<SearchResult[]>('snapshot:search-history');
   const { data: expansionTree, invoke: loadTree } = useIPC<KeywordNode[]>('expansion:tree');
 
@@ -112,6 +113,14 @@ export default function SearchTracker() {
     } finally {
       setCrawlingId(null);
       setTimeout(() => setCrawlMessage(null), 5000);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, kwId: number) => {
+    e.stopPropagation();
+    const result = await deleteKeyword(kwId);
+    if (result.success) {
+      loadKeywords();
     }
   };
 
@@ -287,13 +296,21 @@ export default function SearchTracker() {
                       {kw.watch_count || 0}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={(e) => handleCrawlNow(e, kw.id)}
-                        disabled={crawlingId === kw.id}
-                        className="px-3 py-1 rounded text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors disabled:opacity-50"
-                      >
-                        {crawlingId === kw.id ? 'Crawling...' : 'Crawl Now'}
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={(e) => handleCrawlNow(e, kw.id)}
+                          disabled={crawlingId === kw.id}
+                          className="px-3 py-1 rounded text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors disabled:opacity-50"
+                        >
+                          {crawlingId === kw.id ? 'Crawling...' : 'Crawl'}
+                        </button>
+                        <button
+                          onClick={(e) => handleDelete(e, kw.id)}
+                          className="px-3 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {/* Expanded search results */}

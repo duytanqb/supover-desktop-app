@@ -220,9 +220,9 @@ export default function ShopList() {
                       </button>
                       <button
                         onClick={() => handleArchive(shop.id)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-500/20 text-gray-400 hover:bg-gray-500/30 transition-colors"
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
                       >
-                        Archive
+                        Remove
                       </button>
                     </div>
                   </td>
