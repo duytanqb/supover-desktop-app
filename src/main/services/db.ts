@@ -13,7 +13,7 @@ function getDbPath(): string {
     mkdirSync(dataDir, { recursive: true });
     logger.info(`Created data directory: ${dataDir}`);
   }
-  return join(dataDir, 'etsy-spy.db');
+  return join(dataDir, 'supover.db');
 }
 
 export function initDatabase(): Database.Database {

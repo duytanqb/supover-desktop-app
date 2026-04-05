@@ -46,7 +46,7 @@ export default function Sidebar() {
       <div className="px-5 py-5 border-b border-gray-800">
         <div className="flex items-center gap-2">
           <span className="text-2xl">\uD83D\uDD0D</span>
-          <h1 className="text-lg font-bold text-gray-100 tracking-tight">Etsy Spy</h1>
+          <h1 className="text-lg font-bold text-gray-100 tracking-tight">Supover App</h1>
         </div>
       </div>
 

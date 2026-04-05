@@ -3,19 +3,34 @@ import type Database from 'better-sqlite3';
 import type { IPCResponse, SearchKeyword } from '../../shared/types/index.js';
 
 export function registerKeywordHandlers(db: Database.Database): void {
-  ipcMain.handle('keyword:list', (_event, filters?: { status?: string }): IPCResponse<SearchKeyword[]> => {
+  ipcMain.handle('keyword:list', (_event, filters?: { status?: string }): IPCResponse<any[]> => {
     try {
-      let sql = 'SELECT * FROM search_keywords';
+      let sql = `
+        SELECT
+          sk.*,
+          sk.expansion_source AS source,
+          (SELECT MAX(cj.completed_at) FROM crawl_jobs cj
+           WHERE cj.target_id = sk.id AND cj.job_type = 'search_index' AND cj.status = 'completed') AS last_crawled,
+          COALESCE((SELECT COUNT(*) FROM listing_analytics la
+           JOIN search_snapshots ss ON ss.etsy_listing_id = la.etsy_listing_id
+           WHERE ss.keyword_id = sk.id AND la.trend_status = 'HOT'), 0) AS hot_count,
+          COALESCE((SELECT COUNT(*) FROM listing_analytics la
+           JOIN search_snapshots ss ON ss.etsy_listing_id = la.etsy_listing_id
+           WHERE ss.keyword_id = sk.id AND la.trend_status = 'WATCH'), 0) AS watch_count
+        FROM search_keywords sk
+      `;
       const params: unknown[] = [];
 
       if (filters?.status) {
-        sql += ' WHERE status = ?';
+        sql += ' WHERE sk.status = ?';
         params.push(filters.status);
+      } else {
+        sql += " WHERE sk.status != 'archived'";
       }
 
-      sql += ' ORDER BY created_at DESC';
+      sql += ' ORDER BY sk.created_at DESC';
 
-      const keywords = db.prepare(sql).all(...params) as SearchKeyword[];
+      const keywords = db.prepare(sql).all(...params);
       return { success: true, data: keywords };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -23,13 +38,13 @@ export function registerKeywordHandlers(db: Database.Database): void {
     }
   });
 
-  ipcMain.handle('keyword:add', (_event, params: { keyword: string; category?: string; crawl_interval_minutes?: number; max_pages?: number; notes?: string; parent_keyword_id?: number; expansion_source?: string; source_listing_id?: string; depth?: number }): IPCResponse<SearchKeyword> => {
+  ipcMain.handle('keyword:add', (_event, params: { keyword: string; category?: string; crawl_interval_minutes?: number; max_pages?: number; auto_expand?: boolean; notes?: string; parent_keyword_id?: number; expansion_source?: string; source_listing_id?: string; depth?: number }): IPCResponse<SearchKeyword> => {
     try {
-      if (!params.keyword || !params.keyword.trim()) {
+      if (!params || !params.keyword || !params.keyword.trim()) {
         return { success: false, error: 'keyword is required' };
       }
 
-      const keyword = params.keyword.trim();
+      const keyword = params.keyword.trim().toLowerCase();
 
       // Check uniqueness
       const existing = db.prepare('SELECT id FROM search_keywords WHERE keyword = ?').get(keyword);
@@ -38,13 +53,14 @@ export function registerKeywordHandlers(db: Database.Database): void {
       }
 
       const result = db.prepare(
-        `INSERT INTO search_keywords (keyword, category, crawl_interval_minutes, max_pages, notes, parent_keyword_id, expansion_source, source_listing_id, depth)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO search_keywords (keyword, category, crawl_interval_minutes, max_pages, auto_expand, notes, parent_keyword_id, expansion_source, source_listing_id, depth)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         keyword,
         params.category ?? null,
         params.crawl_interval_minutes ?? 720,
         params.max_pages ?? 3,
+        params.auto_expand !== undefined ? (params.auto_expand ? 1 : 0) : 1,
         params.notes ?? null,
         params.parent_keyword_id ?? null,
         params.expansion_source ?? 'user_input',
@@ -106,12 +122,29 @@ export function registerKeywordHandlers(db: Database.Database): void {
     }
   });
 
-  ipcMain.handle('keyword:crawl-now', (_event, id: number): IPCResponse<{ message: string }> => {
+  ipcMain.handle('keyword:crawl-now', async (_event, id: number): Promise<IPCResponse<{ message: string; listingIds?: string[]; pagesProcessed?: number }>> => {
     try {
       if (!id) {
         return { success: false, error: 'Keyword id is required' };
       }
-      return { success: true, data: { message: 'Crawl queued' } };
+
+      const keyword = db.prepare('SELECT * FROM search_keywords WHERE id = ?').get(id) as SearchKeyword | undefined;
+      if (!keyword) {
+        return { success: false, error: 'Keyword not found' };
+      }
+
+      // Import crawl service dynamically to avoid circular deps
+      const { crawlSearch } = await import('../services/crawlService.js');
+      const result = await crawlSearch(db, id);
+
+      return {
+        success: true,
+        data: {
+          message: `Crawl completed: ${result.listingIds.length} listings found across ${result.pagesProcessed} pages`,
+          listingIds: result.listingIds,
+          pagesProcessed: result.pagesProcessed,
+        },
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: message };

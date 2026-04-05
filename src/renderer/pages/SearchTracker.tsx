@@ -8,11 +8,12 @@ interface Keyword {
   id: number;
   keyword: string;
   category?: string;
-  source: 'user' | 'tag_expansion' | 'ai_suggest';
+  source: string;
+  expansion_source: string;
   depth: number;
-  status: 'active' | 'paused' | 'saturated';
+  status: string;
   max_pages: number;
-  auto_expand: boolean;
+  auto_expand: number;
   last_crawled: string | null;
   hot_count: number;
   watch_count: number;
@@ -20,32 +21,48 @@ interface Keyword {
 
 interface SearchResult {
   id: number;
+  etsy_listing_id: string;
   title: string;
-  shopName: string;
+  shop_name: string;
   price: number;
-  trendStatus?: 'HOT' | 'WATCH' | 'SKIP';
-  sold24h?: number;
-  views24h?: number;
+  sale_price: number | null;
+  is_bestseller: number;
+  is_ad: number;
+  position_in_search: number;
+  page_number: number;
+  crawled_at: string;
 }
 
 const sourceStyles: Record<string, string> = {
-  user: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  user_input: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   tag_expansion: 'bg-green-500/20 text-green-400 border-green-500/30',
   ai_suggest: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  sibling_family: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+};
+
+const sourceLabels: Record<string, string> = {
+  user_input: 'user',
+  tag_expansion: 'tag expansion',
+  ai_suggest: 'AI suggest',
+  sibling_family: 'sibling',
 };
 
 export default function SearchTracker() {
   const [showForm, setShowForm] = useState(false);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [crawlingId, setCrawlingId] = useState<number | null>(null);
+  const [crawlMessage, setCrawlMessage] = useState<string | null>(null);
 
   // Form state
   const [formKeyword, setFormKeyword] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formMaxPages, setFormMaxPages] = useState(3);
   const [formAutoExpand, setFormAutoExpand] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   const { data: keywords, invoke: loadKeywords, loading } = useIPC<Keyword[]>('keyword:list');
   const { invoke: addKeyword } = useIPC('keyword:add');
+  const { invoke: crawlKeyword } = useIPC('keyword:crawl-now');
   const { data: searchResults, invoke: loadSearchResults } = useIPC<SearchResult[]>('snapshot:search-history');
   const { data: expansionTree, invoke: loadTree } = useIPC<KeywordNode[]>('expansion:tree');
 
@@ -56,12 +73,15 @@ export default function SearchTracker() {
 
   const handleAdd = async () => {
     if (!formKeyword.trim()) return;
+    setAddError(null);
+
     const result = await addKeyword({
-      keyword: formKeyword,
+      keyword: formKeyword.trim(),
       category: formCategory || null,
       max_pages: formMaxPages,
       auto_expand: formAutoExpand,
     });
+
     if (result.success) {
       setFormKeyword('');
       setFormCategory('');
@@ -69,6 +89,29 @@ export default function SearchTracker() {
       setFormAutoExpand(false);
       setShowForm(false);
       loadKeywords();
+    } else {
+      setAddError(result.error || 'Failed to add keyword');
+    }
+  };
+
+  const handleCrawlNow = async (e: React.MouseEvent, kwId: number) => {
+    e.stopPropagation();
+    setCrawlingId(kwId);
+    setCrawlMessage(null);
+
+    try {
+      const result = await crawlKeyword(kwId);
+      if (result.success) {
+        setCrawlMessage(result.data?.message || 'Crawl completed');
+        loadKeywords(); // Refresh list
+      } else {
+        setCrawlMessage(`Error: ${result.error}`);
+      }
+    } catch {
+      setCrawlMessage('Crawl failed');
+    } finally {
+      setCrawlingId(null);
+      setTimeout(() => setCrawlMessage(null), 5000);
     }
   };
 
@@ -81,31 +124,53 @@ export default function SearchTracker() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleAdd();
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-100">Keyword Tracking</h1>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => { setShowForm(!showForm); setAddError(null); }}
           className="px-4 py-2 rounded-lg font-medium text-sm bg-indigo-500 text-white hover:opacity-90 transition-opacity"
         >
-          {showForm ? 'Cancel' : 'Add Keyword'}
+          {showForm ? 'Cancel' : '+ Add Keyword'}
         </button>
       </div>
+
+      {/* Crawl message */}
+      {crawlMessage && (
+        <div className={`rounded-lg px-4 py-3 text-sm ${
+          crawlMessage.startsWith('Error') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
+        }`}>
+          {crawlMessage}
+        </div>
+      )}
 
       {/* Add form */}
       {showForm && (
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-4">
+          {addError && (
+            <div className="rounded-lg px-4 py-2 text-sm bg-red-500/10 text-red-400 border border-red-500/20">
+              {addError}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Keyword</label>
+              <label className="block text-sm text-gray-400 mb-1">Keyword *</label>
               <input
                 type="text"
                 placeholder="e.g., funny cat shirt"
                 value={formKeyword}
                 onChange={(e) => setFormKeyword(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                onKeyDown={handleKeyDown}
+                autoFocus
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
               />
             </div>
             <div>
@@ -115,7 +180,8 @@ export default function SearchTracker() {
                 placeholder="e.g., clothing"
                 value={formCategory}
                 onChange={(e) => setFormCategory(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                onKeyDown={handleKeyDown}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
               />
             </div>
           </div>
@@ -128,7 +194,7 @@ export default function SearchTracker() {
                 max={10}
                 value={formMaxPages}
                 onChange={(e) => setFormMaxPages(Number(e.target.value))}
-                className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
               />
             </div>
             <div className="flex items-center gap-2 mt-5">
@@ -146,7 +212,8 @@ export default function SearchTracker() {
           </div>
           <button
             onClick={handleAdd}
-            className="px-4 py-2 rounded-lg font-medium text-sm bg-indigo-500 text-white hover:opacity-90 transition-opacity"
+            disabled={!formKeyword.trim()}
+            className="px-4 py-2 rounded-lg font-medium text-sm bg-indigo-500 text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Add Keyword
           </button>
@@ -165,26 +232,26 @@ export default function SearchTracker() {
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Last Crawled</th>
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">HOT</th>
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">WATCH</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && !keywords ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
                   Loading...
                 </td>
               </tr>
             ) : (keywords ?? []).length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
                   No keywords tracked yet. Add a keyword to start discovering trends.
                 </td>
               </tr>
             ) : (
               (keywords ?? []).map((kw, idx) => (
-                <>
+                <tbody key={kw.id}>
                   <tr
-                    key={kw.id}
                     className={`border-t border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors ${
                       idx % 2 === 1 ? 'bg-gray-900/50' : ''
                     } ${expandedRow === kw.id ? 'bg-gray-800/70' : ''}`}
@@ -192,8 +259,8 @@ export default function SearchTracker() {
                   >
                     <td className="px-4 py-3 text-sm font-medium text-gray-200">{kw.keyword}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${sourceStyles[kw.source]}`}>
-                        {kw.source.replace('_', ' ')}
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${sourceStyles[kw.source || kw.expansion_source] || sourceStyles.user_input}`}>
+                        {sourceLabels[kw.source || kw.expansion_source] || kw.source || 'user'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-400 text-center">{kw.depth}</td>
@@ -211,45 +278,60 @@ export default function SearchTracker() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-400 text-right">
-                      {formatRelativeTime(kw.last_crawled)}
+                      {kw.last_crawled ? formatRelativeTime(kw.last_crawled) : 'Never'}
                     </td>
                     <td className="px-4 py-3 text-sm text-red-400 text-right font-medium">
-                      {kw.hot_count}
+                      {kw.hot_count || 0}
                     </td>
                     <td className="px-4 py-3 text-sm text-yellow-400 text-right font-medium">
-                      {kw.watch_count}
+                      {kw.watch_count || 0}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={(e) => handleCrawlNow(e, kw.id)}
+                        disabled={crawlingId === kw.id}
+                        className="px-3 py-1 rounded text-xs font-medium bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors disabled:opacity-50"
+                      >
+                        {crawlingId === kw.id ? 'Crawling...' : 'Crawl Now'}
+                      </button>
                     </td>
                   </tr>
                   {/* Expanded search results */}
                   {expandedRow === kw.id && (
-                    <tr key={`${kw.id}-results`}>
-                      <td colSpan={7} className="px-4 py-4 bg-gray-800/30">
+                    <tr>
+                      <td colSpan={8} className="px-4 py-4 bg-gray-800/30">
                         {searchResults && searchResults.length > 0 ? (
                           <div className="space-y-2">
+                            <div className="text-xs text-gray-500 mb-2">
+                              {searchResults.length} results found
+                            </div>
                             {searchResults.map((sr) => (
                               <div
                                 key={sr.id}
                                 className="flex items-center gap-3 px-3 py-2 bg-gray-900 rounded-lg border border-gray-800"
                               >
+                                <span className="text-xs text-gray-500 w-6">#{sr.position_in_search}</span>
                                 <span className="text-sm text-gray-200 truncate flex-1">{sr.title}</span>
-                                <span className="text-xs text-gray-500">{sr.shopName}</span>
-                                <span className="text-sm text-gray-100 font-medium">${sr.price.toFixed(2)}</span>
-                                {sr.trendStatus && <TrendBadge status={sr.trendStatus} />}
-                                {sr.sold24h != null && (
-                                  <span className="text-xs text-gray-400">
-                                    <span className="text-green-400">{sr.sold24h}</span> sold
-                                  </span>
-                                )}
+                                <span className="text-xs text-gray-500">{sr.shop_name}</span>
+                                <span className="text-sm text-gray-100 font-medium">
+                                  ${(sr.sale_price || sr.price || 0).toFixed(2)}
+                                </span>
+                                {sr.is_bestseller ? (
+                                  <span className="text-xs bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">BS</span>
+                                ) : null}
+                                {sr.is_ad ? (
+                                  <span className="text-xs bg-gray-500/20 text-gray-400 px-1.5 py-0.5 rounded">Ad</span>
+                                ) : null}
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-sm text-gray-500">No search results yet for this keyword.</p>
+                          <p className="text-sm text-gray-500">No search results yet. Click "Crawl Now" to fetch results.</p>
                         )}
                       </td>
                     </tr>
                   )}
-                </>
+                </tbody>
               ))
             )}
           </tbody>

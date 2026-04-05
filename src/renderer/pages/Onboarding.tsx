@@ -22,7 +22,7 @@ export default function Onboarding() {
     vkingSkipped: false,
     aiProvider: 'anthropic',
     aiKey: '',
-    aiModel: 'claude-sonnet-4-20250514',
+    aiModel: 'claude-sonnet-4-6',
     aiTested: false,
     aiSkipped: false,
     targetsAdded: 0,
@@ -98,7 +98,7 @@ export default function Onboarding() {
 function StepWelcome({ onNext }: { onNext: () => void }) {
   return (
     <div className="text-center">
-      <div className="text-5xl font-bold text-white mb-3">Etsy Spy</div>
+      <div className="text-5xl font-bold text-white mb-3">Supover App</div>
       <p className="text-gray-400 mb-8 leading-relaxed">
         Monitor Etsy shops, track trends, and discover winning products for your POD business.
       </p>

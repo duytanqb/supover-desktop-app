@@ -1,5 +1,5 @@
 {
-  "name": "etsy-spy",
+  "name": "supover-app",
   "version": "0.1.0",
   "description": "Desktop app for tracking Etsy shops and listings for POD teams",
   "main": "./dist-electron/main/main.js",

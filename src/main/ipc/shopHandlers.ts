@@ -119,12 +119,27 @@ export function registerShopHandlers(db: Database.Database): void {
     }
   });
 
-  ipcMain.handle('shop:crawl-now', (_event, id: number): IPCResponse<{ message: string }> => {
+  ipcMain.handle('shop:crawl-now', async (_event, id: number): Promise<IPCResponse<{ message: string; listingIds?: string[] }>> => {
     try {
       if (!id) {
         return { success: false, error: 'Shop id is required' };
       }
-      return { success: true, data: { message: 'Crawl queued' } };
+
+      const shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(id);
+      if (!shop) {
+        return { success: false, error: 'Shop not found' };
+      }
+
+      const { crawlShop } = await import('../services/crawlService.js');
+      const result = await crawlShop(db, id);
+
+      return {
+        success: true,
+        data: {
+          message: `Crawl completed: ${result.listingIds.length} listings found`,
+          listingIds: result.listingIds,
+        },
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: message };
