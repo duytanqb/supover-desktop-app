@@ -19,7 +19,7 @@ export async function launchPersistentContext(
   proxyUrl?: string
 ): Promise<any> {
   const launchOptions: Record<string, any> = {
-    headless: false,
+    headless: true,
     args: [
       '--disable-blink-features=AutomationControlled',
       '--disable-dev-shm-usage',
