@@ -118,7 +118,8 @@ function parseByDataAttribute($: cheerio.CheerioAPI): ListingFromParse[] {
     );
 
     // Currency
-    const currency = $el.find('.currency-symbol').text().trim() === '$' ? 'USD' : 'USD';
+    const currencySymbol = $el.find('.currency-symbol').first().text().trim();
+    const currency = currencySymbol === '$' ? 'USD' : currencySymbol === '₫' ? 'VND' : currencySymbol === '€' ? 'EUR' : currencySymbol === '£' ? 'GBP' : 'USD';
 
     // Image (reference: card.querySelector('img') || card.querySelector('source'))
     const imgEl = $el.find('img').first();
@@ -154,11 +155,20 @@ function parseByDataAttribute($: cheerio.CheerioAPI): ListingFromParse[] {
     const isFreeShipping =
       $el.text().toLowerCase().includes('free shipping');
 
-    // Shop name
-    const shopName =
+    // Shop name — try inside card first, then look in nearby/parent elements
+    let shopName =
       $el.find('.v2-listing-card__shop').text().trim() ||
       $el.find('.shop-name').text().trim() ||
-      undefined;
+      $el.find('[data-seller-name-link]').text().trim() ||
+      '';
+    // If not found inside card, look in parent container
+    if (!shopName) {
+      const parent = $el.closest('.v2-listing-card, .listing-card, [data-listing-card-v2]');
+      if (parent.length) {
+        shopName = parent.find('.shop-name').text().trim() ||
+          parent.find('[data-seller-name-link]').text().trim() || '';
+      }
+    }
 
     listings.push({
       etsyListingId: listingId,
@@ -334,14 +344,19 @@ function parseByCssSelectors($: cheerio.CheerioAPI): ListingFromParse[] {
       const shopName =
         $el.find('.v2-listing-card__shop').text().trim() ||
         $el.find('.shop-name').text().trim() ||
+        $el.find('[data-seller-name-link]').text().trim() ||
         undefined;
+
+      // Currency
+      const currencySymbol = $el.find('.currency-symbol').first().text().trim();
+      const currency = currencySymbol === '$' ? 'USD' : currencySymbol === '₫' ? 'VND' : currencySymbol === '€' ? 'EUR' : currencySymbol === '£' ? 'GBP' : 'USD';
 
       listings.push({
         etsyListingId: listingId,
         title,
         price: parsePrice(priceText),
         salePrice: null,
-        currency: 'USD',
+        currency,
         imageUrl,
         rating: null,
         reviewCount: null,

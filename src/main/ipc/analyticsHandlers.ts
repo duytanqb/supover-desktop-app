@@ -56,17 +56,24 @@ const TRENDING_SELECT = `
     la.qualified,
     la.qualified_by,
     la.fetched_at,
-    COALESCE(ls.title, ss.title, 'Listing #' || la.etsy_listing_id) AS title,
-    COALESCE(ls.image_url, ss.image_url) AS image_url,
-    COALESCE(ls.price, ss.price, 0) AS price,
-    COALESCE(ss.shop_name, s.shop_name, la.shop_country) AS shop_name
+    COALESCE(ls.title, ss_title, 'Listing #' || la.etsy_listing_id) AS title,
+    COALESCE(ls.image_url, ss_image) AS image_url,
+    COALESCE(ls.price, ss_price, 0) AS price,
+    COALESCE(ss_shop, s.shop_name, la.shop_country) AS shop_name
   FROM listing_analytics la
   LEFT JOIN listings l ON l.etsy_listing_id = la.etsy_listing_id
   LEFT JOIN listing_snapshots ls ON ls.listing_id = l.id
     AND ls.crawled_at = (SELECT MAX(ls2.crawled_at) FROM listing_snapshots ls2 WHERE ls2.listing_id = l.id)
   LEFT JOIN shops s ON s.id = l.shop_id
-  LEFT JOIN search_snapshots ss ON ss.etsy_listing_id = la.etsy_listing_id
-    AND ss.crawled_at = (SELECT MAX(ss2.crawled_at) FROM search_snapshots ss2 WHERE ss2.etsy_listing_id = la.etsy_listing_id)
+  LEFT JOIN (
+    SELECT etsy_listing_id,
+           title AS ss_title,
+           image_url AS ss_image,
+           price AS ss_price,
+           shop_name AS ss_shop
+    FROM search_snapshots
+    WHERE id IN (SELECT MAX(id) FROM search_snapshots GROUP BY etsy_listing_id)
+  ) ss_latest ON ss_latest.etsy_listing_id = la.etsy_listing_id
 `;
 
 export function registerAnalyticsHandlers(db: Database.Database): void {

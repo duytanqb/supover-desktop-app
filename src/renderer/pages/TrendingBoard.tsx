@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react';
 import { useIPC } from '../hooks/useIPC';
 import TrendBadge from '../components/TrendBadge';
 
+function formatPrice(price: number | null): string {
+  if (price === null || price === 0) return '—';
+  // If price > 1000, likely VND or similar — format with locale
+  if (price > 1000) {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(price);
+  }
+  return `$${price.toFixed(2)}`;
+}
+
 interface TrendingItem {
   id: number;
   etsy_listing_id: string;
@@ -159,7 +168,7 @@ export default function TrendingBoard() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-400">{item.shop_name || '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-100 text-right font-medium">
-                    ${(item.price ?? 0).toFixed(2)}
+                    {formatPrice(item.price)}
                   </td>
                   <td className="px-4 py-3 text-sm text-right">
                     <span className={item.sold_24h >= 3 ? 'text-green-400 font-medium' : 'text-gray-400'}>
