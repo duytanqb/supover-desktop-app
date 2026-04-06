@@ -208,10 +208,12 @@ const migrations: Migration[] = [
         crawl_job_id    INTEGER REFERENCES crawl_jobs(id),
         crawled_at      TEXT DEFAULT (datetime('now')),
         parsed_at       TEXT,
-        expires_at      TEXT
+        expires_at      TEXT,
+        cache_key       TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_html_cache_target ON html_cache(page_type, target_name, crawled_at);
       CREATE INDEX IF NOT EXISTS idx_html_cache_parse ON html_cache(parse_status);
+      CREATE INDEX IF NOT EXISTS idx_html_cache_key ON html_cache(cache_key);
 
       -- Search keywords
       CREATE TABLE IF NOT EXISTS search_keywords (
@@ -326,7 +328,7 @@ const migrations: Migration[] = [
       INSERT OR IGNORE INTO settings (key, value) VALUES
         ('vking_api_key', 'TxBvgQPYOlsLyzwARLack0Ky2fLIaxHpFLZF5pnZ'),
         ('vking_base_url', 'https://vk1ng.com/api'),
-        ('vking_cache_hours', '24'),
+        ('vking_cache_hours', '3'),
         ('vking_bulk_batch_size', '50'),
         ('ai_provider', 'deepseek'),
         ('ai_api_key', 'sk-90ce824dfea547089563e7bf67265cd1'),
@@ -391,6 +393,18 @@ const migrations: Migration[] = [
       UPDATE settings SET value = 'deepseek' WHERE key = 'ai_provider' AND value IN ('anthropic', '');
       UPDATE settings SET value = 'sk-90ce824dfea547089563e7bf67265cd1' WHERE key = 'ai_api_key' AND (value = '' OR value IS NULL);
       UPDATE settings SET value = 'deepseek-reasoner' WHERE key = 'ai_model' AND value IN ('claude-sonnet-4-20250514', 'deepseek-chat', '');
+    `,
+  },
+  {
+    version: 5,
+    name: 'add_cache_key_and_3h_vking',
+    sql: `
+      -- Add cache_key column for MD5-based HTML cache reuse
+      ALTER TABLE html_cache ADD COLUMN cache_key TEXT;
+      CREATE INDEX IF NOT EXISTS idx_html_cache_key ON html_cache(cache_key);
+
+      -- Update VK1ng cache from 24h to 3h to match crawl interval
+      UPDATE settings SET value = '3' WHERE key = 'vking_cache_hours';
     `,
   },
 ];
