@@ -2,13 +2,17 @@ import Database from 'better-sqlite3';
 import { logger } from '../utils/logger.js';
 
 /**
- * Scheduler Service — auto-queue crawl jobs based on interval, handle block detection
+ * Scheduler Service — automatically crawls shops and keywords on their configured intervals.
+ * Executes crawls directly (not just queuing), handles block detection and auto-pause.
  */
 
 export interface SchedulerStatus {
   isRunning: boolean;
   isPaused: boolean;
   consecutiveBlocks: number;
+  currentTarget: string | null;
+  nextCheckIn: number; // seconds until next check
+  queueLength: number;
 }
 
 interface DueTarget {
@@ -18,38 +22,37 @@ interface DueTarget {
   priority: string;
 }
 
+let schedulerInstance: SchedulerService | null = null;
+
 export class SchedulerService {
   private timer: NodeJS.Timeout | null = null;
   private isRunning = false;
   private isPaused = false;
+  private isCrawling = false;
   private consecutiveBlocks = 0;
   private pauseTimer: NodeJS.Timeout | null = null;
+  private currentTarget: string | null = null;
+  private lastCheckTime = 0;
+  private checkIntervalMs = 60_000; // 60 seconds
   private db: Database.Database;
 
   constructor(db: Database.Database) {
     this.db = db;
   }
 
-  // ---------------------------------------------------------------------------
-  // Start / Stop
-  // ---------------------------------------------------------------------------
-
   start(): void {
     if (this.timer) return;
 
     this.isRunning = true;
+    this.lastCheckTime = Date.now();
     this.timer = setInterval(() => {
-      this.checkDueJobs().catch(err => {
-        logger.error('Scheduler checkDueJobs error', { error: (err as Error).message });
-      });
-    }, 60_000);
+      this.tick();
+    }, this.checkIntervalMs);
 
-    logger.info('Scheduler started');
+    logger.info('Scheduler started (check every 60s)');
 
-    // Run immediately on start
-    this.checkDueJobs().catch(err => {
-      logger.error('Scheduler initial checkDueJobs error', { error: (err as Error).message });
-    });
+    // Run first check after a short delay (let app fully init)
+    setTimeout(() => this.tick(), 5000);
   }
 
   stop(): void {
@@ -63,64 +66,45 @@ export class SchedulerService {
     }
     this.isRunning = false;
     this.isPaused = false;
+    this.isCrawling = false;
+    this.currentTarget = null;
     logger.info('Scheduler stopped');
   }
 
-  // ---------------------------------------------------------------------------
-  // Check due jobs
-  // ---------------------------------------------------------------------------
-
-  async checkDueJobs(): Promise<void> {
-    if (this.isPaused) return;
-
-    const dueTargets = this.getDueTargets();
-
-    if (dueTargets.length === 0) return;
-
-    logger.info('Scheduler found due targets', { count: dueTargets.length });
-
-    for (const target of dueTargets) {
-      if (this.isPaused) break;
-      await this.processTarget(target);
-    }
+  private tick(): void {
+    if (this.isPaused || this.isCrawling) return;
+    this.lastCheckTime = Date.now();
+    this.processNextDue().catch(err => {
+      logger.error('Scheduler tick error', { error: (err as Error).message });
+    });
   }
-
-  // ---------------------------------------------------------------------------
-  // Get shops and keywords that need crawling
-  // ---------------------------------------------------------------------------
 
   private getDueTargets(): DueTarget[] {
     const targets: DueTarget[] = [];
 
     // Shops due for crawl
     const dueShops = this.db.prepare(`
-      SELECT s.id, s.shop_name, s.priority, s.crawl_interval_minutes
+      SELECT s.id, s.shop_name, s.priority
       FROM shops s
       WHERE s.status = 'active'
         AND NOT EXISTS (
           SELECT 1 FROM crawl_jobs cj
           WHERE cj.job_type = 'shop_index'
             AND cj.target_id = s.id
-            AND cj.status = 'completed'
+            AND cj.status IN ('completed', 'running')
             AND cj.completed_at > datetime('now', '-' || s.crawl_interval_minutes || ' minutes')
         )
       ORDER BY
-        CASE s.priority WHEN 'high' THEN 3 WHEN 'normal' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC,
-        s.updated_at ASC
+        CASE s.priority WHEN 'high' THEN 3 WHEN 'normal' THEN 2 ELSE 1 END DESC
     `).all() as Array<{ id: number; shop_name: string; priority: string }>;
 
     for (const shop of dueShops) {
-      targets.push({
-        type: 'shop_index',
-        targetId: shop.id,
-        name: shop.shop_name,
-        priority: shop.priority,
-      });
+      targets.push({ type: 'shop_index', targetId: shop.id, name: shop.shop_name, priority: shop.priority });
     }
 
-    // Search keywords due for crawl
+    // Keywords due for crawl
     const dueKeywords = this.db.prepare(`
-      SELECT sk.id, sk.keyword, 'normal' as priority, sk.crawl_interval_minutes
+      SELECT sk.id, sk.keyword
       FROM search_keywords sk
       WHERE sk.status = 'active'
         AND sk.is_saturated = 0
@@ -128,111 +112,80 @@ export class SchedulerService {
           SELECT 1 FROM crawl_jobs cj
           WHERE cj.job_type = 'search_index'
             AND cj.target_id = sk.id
-            AND cj.status = 'completed'
+            AND cj.status IN ('completed', 'running')
             AND cj.completed_at > datetime('now', '-' || sk.crawl_interval_minutes || ' minutes')
         )
       ORDER BY sk.depth ASC, sk.created_at ASC
-    `).all() as Array<{ id: number; keyword: string; priority: string }>;
+    `).all() as Array<{ id: number; keyword: string }>;
 
     for (const kw of dueKeywords) {
-      targets.push({
-        type: 'search_index',
-        targetId: kw.id,
-        name: kw.keyword,
-        priority: kw.priority,
-      });
+      targets.push({ type: 'search_index', targetId: kw.id, name: kw.keyword, priority: 'normal' });
     }
 
     return targets;
   }
 
-  // ---------------------------------------------------------------------------
-  // Process a single target
-  // ---------------------------------------------------------------------------
+  private async processNextDue(): Promise<void> {
+    const targets = this.getDueTargets();
+    if (targets.length === 0) return;
 
-  private async processTarget(target: DueTarget): Promise<void> {
-    if (this.isPaused) return;
+    // Process one target at a time
+    const target = targets[0];
+    this.isCrawling = true;
+    this.currentTarget = `${target.type === 'shop_index' ? 'Shop' : 'Keyword'}: ${target.name}`;
 
-    logger.info('Scheduler processing target', { type: target.type, targetId: target.targetId, name: target.name });
+    logger.info('Scheduler crawling', { type: target.type, name: target.name, queueRemaining: targets.length - 1 });
 
     try {
-      // Create a crawl job record
-      const result = this.db.prepare(`
-        INSERT INTO crawl_jobs (job_type, target_id, status, started_at)
-        VALUES (?, ?, 'pending', datetime('now'))
-      `).run(target.type, target.targetId);
+      const { crawlShop, crawlSearch } = await import('./crawlService.js');
 
-      const jobId = result.lastInsertRowid as number;
+      if (target.type === 'shop_index') {
+        await crawlShop(this.db, target.targetId);
+      } else {
+        await crawlSearch(this.db, target.targetId);
+      }
 
-      // NOTE: The actual crawl execution is delegated to crawlService.
-      // This scheduler only creates the job record and tracks block state.
-      // The crawlService should be called externally to process pending jobs.
-      // Mark job as "pending" so crawlService can pick it up.
-
-      logger.info('Scheduler created crawl job', { jobId, type: target.type, targetId: target.targetId });
-
-      // Reset consecutive blocks on success (job creation)
       this.consecutiveBlocks = 0;
-
+      logger.info('Scheduler crawl completed', { type: target.type, name: target.name });
     } catch (error) {
       const errMsg = (error as Error).message;
 
-      // Check if this is a block error
-      if (errMsg.includes('blocked') || errMsg.includes('BlockedError')) {
+      if (errMsg.includes('Blocked') || errMsg.includes('blocked')) {
         this.consecutiveBlocks++;
-        logger.warn('Scheduler detected block', {
-          consecutiveBlocks: this.consecutiveBlocks,
-          target: target.name,
-        });
+        logger.warn('Scheduler: crawl blocked', { consecutiveBlocks: this.consecutiveBlocks, target: target.name });
 
-        // Get pause threshold from settings
-        const pauseThresholdRow = this.db.prepare(
-          "SELECT value FROM settings WHERE key = 'pause_on_consecutive_blocks'",
-        ).get() as { value: string } | undefined;
-        const pauseThreshold = parseInt(pauseThresholdRow?.value ?? '3', 10);
-
+        const pauseThreshold = parseInt(this.getSetting('pause_on_consecutive_blocks', '3'));
         if (this.consecutiveBlocks >= pauseThreshold) {
-          const pauseMinutesRow = this.db.prepare(
-            "SELECT value FROM settings WHERE key = 'pause_duration_minutes'",
-          ).get() as { value: string } | undefined;
-          const pauseMinutes = parseInt(pauseMinutesRow?.value ?? '30', 10);
-
+          const pauseMinutes = parseInt(this.getSetting('pause_duration_minutes', '30'));
           this.pause(pauseMinutes);
 
-          // Create an alert for the auto-pause
+          // Create alert
           try {
-            this.db.prepare(`
-              INSERT INTO alerts (alert_type, severity, old_value, new_value)
-              VALUES ('scheduler_auto_pause', 'important', ?, ?)
-            `).run(
-              String(this.consecutiveBlocks),
-              `Paused for ${pauseMinutes} minutes`,
-            );
-          } catch {
-            // Non-critical
-          }
+            this.db.prepare(
+              "INSERT INTO alerts (alert_type, severity, old_value, new_value) VALUES ('scheduler_auto_pause', 'important', ?, ?)"
+            ).run(String(this.consecutiveBlocks), `Auto-paused for ${pauseMinutes} minutes after ${this.consecutiveBlocks} consecutive blocks`);
+          } catch { /* non-critical */ }
         }
       } else {
-        logger.error('Scheduler processTarget failed', {
-          target: target.name,
-          error: errMsg,
-        });
+        logger.error('Scheduler crawl failed', { target: target.name, error: errMsg });
       }
+    } finally {
+      this.isCrawling = false;
+      this.currentTarget = null;
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Pause / Resume
-  // ---------------------------------------------------------------------------
+  private getSetting(key: string, defaultValue: string): string {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+    return row?.value ?? defaultValue;
+  }
 
   pause(minutes: number): void {
     this.isPaused = true;
-    logger.warn('Scheduler paused', { minutes, consecutiveBlocks: this.consecutiveBlocks });
+    logger.warn('Scheduler paused', { minutes });
 
     if (this.pauseTimer) clearTimeout(this.pauseTimer);
-    this.pauseTimer = setTimeout(() => {
-      this.resume();
-    }, minutes * 60_000);
+    this.pauseTimer = setTimeout(() => this.resume(), minutes * 60_000);
   }
 
   resume(): void {
@@ -245,23 +198,30 @@ export class SchedulerService {
     logger.info('Scheduler resumed');
   }
 
-  // ---------------------------------------------------------------------------
-  // Status
-  // ---------------------------------------------------------------------------
-
   getStatus(): SchedulerStatus {
+    const elapsed = Date.now() - this.lastCheckTime;
+    const nextCheckIn = Math.max(0, Math.floor((this.checkIntervalMs - elapsed) / 1000));
+    let queueLength = 0;
+    try {
+      queueLength = this.getDueTargets().length;
+    } catch { /* ignore */ }
+
     return {
       isRunning: this.isRunning,
       isPaused: this.isPaused,
       consecutiveBlocks: this.consecutiveBlocks,
+      currentTarget: this.currentTarget,
+      nextCheckIn,
+      queueLength,
     };
   }
 }
 
-// ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
-
 export function createScheduler(db: Database.Database): SchedulerService {
-  return new SchedulerService(db);
+  schedulerInstance = new SchedulerService(db);
+  return schedulerInstance;
+}
+
+export function getScheduler(): SchedulerService | null {
+  return schedulerInstance;
 }

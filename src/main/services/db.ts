@@ -330,7 +330,7 @@ const migrations: Migration[] = [
         ('vking_bulk_batch_size', '50'),
         ('ai_provider', 'deepseek'),
         ('ai_api_key', 'sk-90ce824dfea547089563e7bf67265cd1'),
-        ('ai_model', 'deepseek-chat'),
+        ('ai_model', 'deepseek-reasoner'),
         ('default_crawl_interval', '360'),
         ('max_concurrent_tabs', '2'),
         ('page_view_limit_per_hour', '60'),
@@ -390,7 +390,7 @@ const migrations: Migration[] = [
       UPDATE settings SET value = 'TxBvgQPYOlsLyzwARLack0Ky2fLIaxHpFLZF5pnZ' WHERE key = 'vking_api_key' AND (value = '' OR value IS NULL);
       UPDATE settings SET value = 'deepseek' WHERE key = 'ai_provider' AND value IN ('anthropic', '');
       UPDATE settings SET value = 'sk-90ce824dfea547089563e7bf67265cd1' WHERE key = 'ai_api_key' AND (value = '' OR value IS NULL);
-      UPDATE settings SET value = 'deepseek-chat' WHERE key = 'ai_model' AND value IN ('claude-sonnet-4-20250514', '');
+      UPDATE settings SET value = 'deepseek-reasoner' WHERE key = 'ai_model' AND value IN ('claude-sonnet-4-20250514', 'deepseek-chat', '');
     `,
   },
 ];

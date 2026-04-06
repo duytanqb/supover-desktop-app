@@ -3,6 +3,7 @@ import { join } from 'path';
 import { initDatabase } from './services/db.js';
 import { registerAllHandlers } from './ipc/index.js';
 import { logger, initFileLogger } from './utils/logger.js';
+import { createScheduler } from './services/schedulerService.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -61,6 +62,11 @@ app.whenReady().then(() => {
   // Register IPC handlers
   registerAllHandlers(db);
 
+  // Start scheduler for automatic crawling
+  const scheduler = createScheduler(db);
+  scheduler.start();
+  logger.info('Scheduler started');
+
   // Create window
   createWindow();
 
@@ -78,5 +84,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  const { getScheduler } = require('./services/schedulerService.js');
+  const scheduler = getScheduler();
+  if (scheduler) scheduler.stop();
   logger.info('App quitting');
 });

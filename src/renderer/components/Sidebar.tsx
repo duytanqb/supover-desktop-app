@@ -2,8 +2,11 @@ import { NavLink } from 'react-router-dom';
 import { usePolling } from '../hooks/usePolling';
 
 interface CrawlStatus {
-  status: 'running' | 'paused' | 'idle';
-  jobsInQueue: number;
+  isRunning: boolean;
+  isPaused: boolean;
+  queueLength: number;
+  currentTarget: string | null;
+  nextCheckIn: number;
 }
 
 const navItems = [
@@ -18,19 +21,10 @@ const navItems = [
 export default function Sidebar() {
   const { data: crawlStatus } = usePolling<CrawlStatus>('crawl:status', 10_000);
 
-  const statusColor = {
-    running: 'bg-green-500',
-    paused: 'bg-yellow-500',
-    idle: 'bg-gray-500',
-  };
+  const currentStatus = crawlStatus?.currentTarget ? 'crawling' : crawlStatus?.isPaused ? 'paused' : crawlStatus?.isRunning ? 'running' : 'idle';
 
-  const statusLabel = {
-    running: 'Crawling',
-    paused: 'Paused',
-    idle: 'Idle',
-  };
-
-  const currentStatus = crawlStatus?.status ?? 'idle';
+  const statusColor = { crawling: 'bg-green-500', running: 'bg-green-500', paused: 'bg-yellow-500', idle: 'bg-gray-500' };
+  const statusLabel = { crawling: 'Crawling', running: 'Running', paused: 'Paused', idle: 'Idle' };
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-gray-900 border-r border-gray-800 flex flex-col z-50">
@@ -66,11 +60,11 @@ export default function Sidebar() {
       {/* Crawl Status */}
       <div className="px-4 py-4 border-t border-gray-800">
         <div className="flex items-center gap-2">
-          <span className={`w-2.5 h-2.5 rounded-full ${statusColor[currentStatus]} animate-pulse`} />
+          <span className={`w-2.5 h-2.5 rounded-full ${statusColor[currentStatus]} ${currentStatus === 'crawling' ? 'animate-pulse' : ''}`} />
           <span className="text-xs text-gray-400">{statusLabel[currentStatus]}</span>
-          {crawlStatus?.jobsInQueue ? (
+          {crawlStatus?.queueLength ? (
             <span className="ml-auto text-xs text-gray-500">
-              {crawlStatus.jobsInQueue} in queue
+              {crawlStatus.queueLength} due
             </span>
           ) : null}
         </div>

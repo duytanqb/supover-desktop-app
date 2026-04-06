@@ -11,7 +11,7 @@ interface AIConfig {
 const DEFAULT_MODELS: Record<string, string> = {
   anthropic: 'claude-sonnet-4-6',
   openai: 'gpt-4o',
-  deepseek: 'deepseek-chat',
+  deepseek: 'deepseek-reasoner',
 };
 
 const API_URLS: Record<string, string> = {

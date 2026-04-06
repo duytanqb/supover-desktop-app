@@ -22,7 +22,7 @@ export default function Onboarding() {
     vkingSkipped: false,
     aiProvider: 'deepseek',
     aiKey: '',
-    aiModel: 'deepseek-chat',
+    aiModel: 'deepseek-reasoner',
     aiTested: false,
     aiSkipped: false,
     targetsAdded: 0,
@@ -244,7 +244,7 @@ function StepAI({
     setState((prev) => ({
       ...prev,
       aiProvider: provider,
-      aiModel: provider === 'deepseek' ? 'deepseek-chat' : provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o',
+      aiModel: provider === 'deepseek' ? 'deepseek-reasoner' : provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o',
       aiTested: false,
     }));
     setTestResult(null);
