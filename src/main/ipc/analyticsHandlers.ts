@@ -139,7 +139,7 @@ export function registerAnalyticsHandlers(db: Database.Database): void {
   });
 
   // Trending listings with full data
-  ipcMain.handle('analytics:trending', (_event, params?: { status?: string; search?: string; limit?: number; page?: number; pageSize?: number }): IPCResponse<TrendingResponse> => {
+  ipcMain.handle('analytics:trending', (_event, params?: { status?: string; sortBy?: string; page?: number; pageSize?: number }): IPCResponse<TrendingResponse> => {
     try {
       const pageSize = params?.pageSize ?? 20;
       const page = params?.page ?? 1;
@@ -153,12 +153,22 @@ export function registerAnalyticsHandlers(db: Database.Database): void {
         queryParams.push(params.status);
       }
 
+      // Sort order
+      const sortMap: Record<string, string> = {
+        latest: 'la.fetched_at DESC',
+        score: 'la.trending_score DESC',
+        sold_24h: 'la.sold_24h DESC',
+        views_24h: 'la.views_24h DESC',
+        hey_score: 'la.hey_score DESC',
+      };
+      const orderBy = sortMap[params?.sortBy ?? 'latest'] ?? sortMap.latest;
+
       // Count total
       const countSql = `SELECT COUNT(DISTINCT la.id) as count FROM listing_analytics la ${where}`;
       const total = (db.prepare(countSql).get(...queryParams) as { count: number }).count;
 
       // Fetch page
-      const sql = `${TRENDING_SELECT} ${where} ORDER BY la.trending_score DESC LIMIT ? OFFSET ?`;
+      const sql = `${TRENDING_SELECT} ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
       const listings = db.prepare(sql).all(...queryParams, pageSize, offset) as TrendingItem[];
 
       return {

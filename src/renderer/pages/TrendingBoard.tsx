@@ -1,15 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useIPC } from '../hooks/useIPC';
 import TrendBadge from '../components/TrendBadge';
-
-function formatPrice(price: number | null): string {
-  if (price === null || price === 0) return '—';
-  // If price > 1000, likely VND or similar — format with locale
-  if (price > 1000) {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(price);
-  }
-  return `$${price.toFixed(2)}`;
-}
+import { formatRelativeTime } from '../utils/formatTime';
 
 interface TrendingItem {
   id: number;
@@ -17,7 +9,6 @@ interface TrendingItem {
   title: string | null;
   image_url: string | null;
   shop_name: string | null;
-  price: number | null;
   sold_24h: number;
   views_24h: number;
   hey_score: number;
@@ -27,7 +18,6 @@ interface TrendingItem {
   total_sold: number;
   conversion_rate: number;
   tags: string;
-  qualified: number;
   fetched_at: string;
 }
 
@@ -38,8 +28,11 @@ interface TrendingResponse {
   pageSize: number;
 }
 
+type SortField = 'latest' | 'score' | 'sold_24h' | 'views_24h' | 'hey_score';
+
 export default function TrendingBoard() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'HOT' | 'WATCH'>('ALL');
+  const [sortBy, setSortBy] = useState<SortField>('latest');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 20;
@@ -47,8 +40,8 @@ export default function TrendingBoard() {
   const { data, loading, invoke } = useIPC<TrendingResponse>('analytics:trending');
 
   useEffect(() => {
-    invoke({ status: statusFilter === 'ALL' ? undefined : statusFilter, search, page, pageSize });
-  }, [statusFilter, page]);
+    invoke({ status: statusFilter === 'ALL' ? undefined : statusFilter, sortBy, page, pageSize });
+  }, [statusFilter, sortBy, page]);
 
   const listings = data?.listings ?? [];
   const total = data?.total ?? 0;
@@ -65,8 +58,6 @@ export default function TrendingBoard() {
     : listings;
 
   const openListing = (etsyListingId: string) => {
-    window.electron.ipcRenderer.invoke('shell:open-external', `https://www.etsy.com/listing/${etsyListingId}`);
-    // Fallback: open via window.open if shell handler doesn't exist
     window.open(`https://www.etsy.com/listing/${etsyListingId}`, '_blank');
   };
 
@@ -82,15 +73,24 @@ export default function TrendingBoard() {
       <div className="flex items-center gap-4">
         <select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as 'ALL' | 'HOT' | 'WATCH');
-            setPage(1);
-          }}
+          onChange={(e) => { setStatusFilter(e.target.value as 'ALL' | 'HOT' | 'WATCH'); setPage(1); }}
           className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
         >
           <option value="ALL">All Statuses</option>
           <option value="HOT">HOT Only</option>
           <option value="WATCH">WATCH Only</option>
+        </select>
+
+        <select
+          value={sortBy}
+          onChange={(e) => { setSortBy(e.target.value as SortField); setPage(1); }}
+          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+        >
+          <option value="latest">Latest Crawl</option>
+          <option value="score">Trending Score</option>
+          <option value="sold_24h">Sold 24h</option>
+          <option value="views_24h">Views 24h</option>
+          <option value="hey_score">HEY Score</option>
         </select>
 
         <input
@@ -104,31 +104,30 @@ export default function TrendingBoard() {
 
       {/* Table */}
       <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-x-auto">
-        <table className="w-full min-w-[900px]">
+        <table className="w-full">
           <thead>
             <tr className="bg-gray-800">
               <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium w-10">#</th>
-              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Listing ID</th>
+              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Listing ID</th>
               <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Title</th>
-              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Shop</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Price</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Sold 24h</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Views 24h</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">HEY</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Score</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Status</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Sold 24h</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Views 24h</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">HEY</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Score</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Status</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Fetched</th>
             </tr>
           </thead>
           <tbody>
             {loading && filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
                   Loading...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
                   No trending listings found. Crawl keywords or shops to discover trends.
                 </td>
               </tr>
@@ -156,7 +155,7 @@ export default function TrendingBoard() {
                     <div className="min-w-0">
                       <button
                         onClick={() => openListing(item.etsy_listing_id)}
-                        className="text-sm text-gray-200 hover:text-indigo-300 hover:underline truncate max-w-xs block text-left transition-colors"
+                        className="text-sm text-gray-200 hover:text-indigo-300 hover:underline truncate max-w-md block text-left transition-colors"
                         title={item.title || undefined}
                       >
                         {item.title || `Listing #${item.etsy_listing_id}`}
@@ -165,10 +164,6 @@ export default function TrendingBoard() {
                         {item.days_old}d old · {item.total_sold} total sold
                       </div>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-400">{item.shop_name || '—'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-100 text-right font-medium">
-                    {formatPrice(item.price)}
                   </td>
                   <td className="px-4 py-3 text-sm text-right">
                     <span className={item.sold_24h >= 3 ? 'text-green-400 font-medium' : 'text-gray-400'}>
@@ -190,6 +185,9 @@ export default function TrendingBoard() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <TrendBadge status={item.trend_status} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500 text-right whitespace-nowrap">
+                    {formatRelativeTime(item.fetched_at)}
                   </td>
                 </tr>
               ))
