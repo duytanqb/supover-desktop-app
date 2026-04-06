@@ -103,8 +103,8 @@ export default function TrendingBoard() {
       </div>
 
       {/* Table */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-        <table className="w-full">
+      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-x-auto">
+        <table className="w-full min-w-[900px]">
           <thead>
             <tr className="bg-gray-800">
               <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium w-10">#</th>

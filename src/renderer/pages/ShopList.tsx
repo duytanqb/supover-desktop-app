@@ -147,7 +147,7 @@ export default function ShopList() {
       />
 
       {/* Table */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="bg-gray-800">

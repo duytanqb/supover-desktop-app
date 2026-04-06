@@ -16,9 +16,9 @@ export default function App() {
       <Route
         path="*"
         element={
-          <div className="flex min-h-screen bg-gray-950">
+          <div className="flex h-screen bg-gray-950">
             <Sidebar />
-            <main className="flex-1 ml-64 p-6 overflow-auto">
+            <main className="flex-1 ml-64 p-6 overflow-y-auto">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/trending" element={<TrendingBoard />} />

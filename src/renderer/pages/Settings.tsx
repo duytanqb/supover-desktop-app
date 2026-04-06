@@ -344,7 +344,7 @@ export default function Settings() {
 
         {/* Proxy table */}
         {(proxies ?? []).length > 0 && (
-          <div className="rounded-lg border border-gray-700 overflow-hidden">
+          <div className="rounded-lg border border-gray-700 overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-800">

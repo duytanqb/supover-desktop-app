@@ -183,7 +183,7 @@ export default function ShopDetail() {
       )}
 
       {/* Listings table */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-x-auto">
         <div className="px-6 py-4 border-b border-gray-800">
           <h2 className="text-lg font-semibold text-gray-100">
             Listings ({listings.length})
@@ -238,7 +238,7 @@ export default function ShopDetail() {
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded bg-gray-800 flex-shrink-0 overflow-hidden">
+                      <div className="w-10 h-10 rounded bg-gray-800 flex-shrink-0 overflow-x-auto">
                         {listing.imageUrl ? (
                           <img src={listing.imageUrl} alt="" className="w-full h-full object-cover" />
                         ) : (
