@@ -120,6 +120,25 @@ function updateCrawlJob(
   }
 }
 
+// ─── Product type filter ─────────────────────────────────────────────────────
+// Only keep POD-relevant products. Filter out ads/promoted items like jewelry, rings, etc.
+
+const ALLOWED_PRODUCT_KEYWORDS = [
+  'shirt', 'tshirt', 't-shirt', 'tee',
+  'hoodie',
+  'sweater',
+  'sweatshirt',
+  'tumbler',
+  'mug', 'cup',
+  'poster', 'print', 'canvas', 'wall art',
+];
+
+function isPodProduct(title: string): boolean {
+  if (!title) return false;
+  const lower = title.toLowerCase();
+  return ALLOWED_PRODUCT_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 // ─── Post-crawl: VK1ng analytics + trend classification ──────────────────────
 
 async function fetchAnalyticsAndClassify(
@@ -394,18 +413,21 @@ export async function crawlShop(
       const html = readHtml(db, cachedRecord.id);
       const data = parseShopIndex(html);
 
+      // Filter: only POD products
+      const podListings = data.listings.filter(l => isPodProduct(l.title));
+
       // Save parsed data in transaction
       const saveParsed = db.transaction(() => {
         insertShopSnapshot(db, shopId, data.shopInfo, cachedRecord.crawl_job_id, cachedRecord.file_path);
-        for (const listing of data.listings) {
+        for (const listing of podListings) {
           upsertListingAndSnapshot(db, shopId, listing, cachedRecord.crawl_job_id);
         }
-        updateCacheParseStatus(db, cachedRecord.id, 'parsed', data.listings.length);
+        updateCacheParseStatus(db, cachedRecord.id, 'parsed', podListings.length);
       });
       saveParsed();
 
       return {
-        listingIds: data.listings.map((l) => l.etsyListingId),
+        listingIds: podListings.map((l) => l.etsyListingId),
         pagesProcessed: 0,
       };
     } catch (err) {
@@ -474,20 +496,24 @@ export async function crawlShop(
     const savedHtml = readHtml(db, cacheRecord.id);
     const data = parseShopIndex(savedHtml);
 
+    // Filter: only POD products
+    const podListings = data.listings.filter(l => isPodProduct(l.title));
+    logger.info('Filtered POD products (shop)', { total: data.listings.length, pod: podListings.length });
+
     // 13. Save to DB in a transaction
     const saveData = db.transaction(() => {
       insertShopSnapshot(db, shopId, data.shopInfo, job.id, cacheRecord.file_path);
-      for (const listing of data.listings) {
+      for (const listing of podListings) {
         upsertListingAndSnapshot(db, shopId, listing, job.id);
       }
-      updateCacheParseStatus(db, cacheRecord.id, 'parsed', data.listings.length);
+      updateCacheParseStatus(db, cacheRecord.id, 'parsed', podListings.length);
     });
     saveData();
 
     // 14. Update crawl job
     updateCrawlJob(db, job.id, 'completed', undefined, 1);
 
-    const listingIds = data.listings.map((l) => l.etsyListingId);
+    const listingIds = podListings.map((l) => l.etsyListingId);
 
     // 15. Fetch VK1ng analytics + classify trends
     const analytics = await fetchAnalyticsAndClassify(db, listingIds, job.id);
@@ -584,16 +610,20 @@ export async function crawlSearch(
           const html = readHtml(db, cachedRecord.id);
           const data = parseSearchIndex(html, keyword.keyword, pageNum);
 
+          // Filter: only POD products
+          const podListings = data.listings.filter(l => isPodProduct(l.title));
+          logger.info('Filtered POD products', { total: data.listings.length, pod: podListings.length, filtered: data.listings.length - podListings.length });
+
           // Save parsed data
           const saveParsed = db.transaction(() => {
-            for (const listing of data.listings) {
+            for (const listing of podListings) {
               insertSearchSnapshot(db, keywordId, listing, pageNum, cachedRecord.crawl_job_id);
             }
-            updateCacheParseStatus(db, cachedRecord.id, 'parsed', data.listings.length);
+            updateCacheParseStatus(db, cachedRecord.id, 'parsed', podListings.length);
           });
           saveParsed();
 
-          allListingIds.push(...data.listings.map((l) => l.etsyListingId));
+          allListingIds.push(...podListings.map((l) => l.etsyListingId));
           totalPagesProcessed++;
           continue;
         } catch (err) {
@@ -644,16 +674,20 @@ export async function crawlSearch(
       const savedHtml = readHtml(db, cacheRecord.id);
       const data = parseSearchIndex(savedHtml, keyword.keyword, pageNum);
 
+      // Filter: only POD products
+      const podListings = data.listings.filter(l => isPodProduct(l.title));
+      logger.info('Filtered POD products', { total: data.listings.length, pod: podListings.length, filtered: data.listings.length - podListings.length });
+
       // Save to DB in transaction
       const saveData = db.transaction(() => {
-        for (const listing of data.listings) {
+        for (const listing of podListings) {
           insertSearchSnapshot(db, keywordId, listing, pageNum, job.id);
         }
-        updateCacheParseStatus(db, cacheRecord.id, 'parsed', data.listings.length);
+        updateCacheParseStatus(db, cacheRecord.id, 'parsed', podListings.length);
       });
       saveData();
 
-      allListingIds.push(...data.listings.map((l) => l.etsyListingId));
+      allListingIds.push(...podListings.map((l) => l.etsyListingId));
       totalPagesProcessed++;
 
       // Random delay between pages (respect rate limits)
