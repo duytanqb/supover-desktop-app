@@ -17,6 +17,7 @@ import {
   launchPersistentContext,
   closeContext,
   isBlocked,
+  waitForCloudflare,
 } from './browserService.js';
 import {
   getAvailableProfile,
@@ -386,7 +387,8 @@ export async function crawlShop(
     logger.info('Navigating to shop', { shopUrl });
     await page.goto(shopUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    // 8. Random delay (3-8s as per rules)
+    // 8. Wait for Cloudflare + random delay
+    await waitForCloudflare(page, 30000);
     await randomDelay(3000, 8000);
 
     // 9. Block detection — MUST check BEFORE saving HTML
@@ -555,7 +557,8 @@ export async function crawlSearch(
       logger.info('Navigating to search page', { keyword: keyword.keyword, page: pageNum, url: searchUrl });
       await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-      // Random delay (3-8s)
+      // Wait for Cloudflare + random delay
+      await waitForCloudflare(page, 30000);
       await randomDelay(3000, 8000);
 
       // Block detection

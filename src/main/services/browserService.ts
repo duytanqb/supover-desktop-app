@@ -19,7 +19,7 @@ export async function launchPersistentContext(
   proxyUrl?: string
 ): Promise<any> {
   const launchOptions: Record<string, any> = {
-    headless: true,
+    headless: false,
     args: [
       '--disable-blink-features=AutomationControlled',
       '--disable-dev-shm-usage',
@@ -65,11 +65,42 @@ export async function closeContext(ctx: any): Promise<void> {
  * @param page - Playwright Page instance
  * @returns true if the page appears to be blocked
  */
+/**
+ * Wait for Cloudflare challenge to resolve.
+ * Etsy uses Cloudflare which shows a blank page with title "etsy.com" while checking.
+ * Returns true if page loaded successfully, false if stuck on challenge.
+ */
+export async function waitForCloudflare(page: any, maxWaitMs: number = 30000): Promise<boolean> {
+  const startTime = Date.now();
+  const checkInterval = 2000;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    const title: string = await page.title().catch(() => '');
+    const contentLength = (await page.content().catch(() => '')).length;
+
+    // Cloudflare challenge page has title "etsy.com" and tiny body
+    // Real Etsy pages have descriptive titles and large body
+    if (contentLength > 10000 && title !== 'etsy.com') {
+      logger.info('Cloudflare check passed', { title, contentLength });
+      return true;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, checkInterval));
+  }
+
+  logger.warn('Cloudflare challenge did not resolve', { maxWaitMs });
+  return false;
+}
+
 export async function isBlocked(page: any): Promise<boolean> {
   try {
     const url: string = page.url();
     const title: string = await page.title();
     const bodyText: string = await page.textContent('body').catch(() => '');
+    const contentLength = (await page.content().catch(() => '')).length;
+
+    // Cloudflare challenge (tiny page with generic title)
+    const isCloudflare = title === 'etsy.com' && contentLength < 5000;
 
     const urlBlocked =
       url.includes('captcha') ||
@@ -90,7 +121,7 @@ export async function isBlocked(page: any): Promise<boolean> {
       bodyText.includes('verify you are a human') ||
       bodyText.includes('automated access');
 
-    const blocked = urlBlocked || titleBlocked || bodyBlocked;
+    const blocked = isCloudflare || urlBlocked || titleBlocked || bodyBlocked;
 
     if (blocked) {
       logger.warn('Page appears to be blocked', {

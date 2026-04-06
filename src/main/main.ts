@@ -2,7 +2,7 @@ import { app, BrowserWindow, shell } from 'electron';
 import { join } from 'path';
 import { initDatabase } from './services/db.js';
 import { registerAllHandlers } from './ipc/index.js';
-import { logger } from './utils/logger.js';
+import { logger, initFileLogger } from './utils/logger.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -49,6 +49,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Initialize file logger (app.getPath available after ready)
+  initFileLogger();
+
   logger.info('App ready, initializing...');
 
   // Initialize database
