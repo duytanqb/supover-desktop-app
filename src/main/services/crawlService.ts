@@ -43,6 +43,7 @@ import {
 import type { ListingFromParse, ShopIndexData, SearchIndexData } from './parserService.js';
 import { getBulkListings, filterNewIds, getVkingConfig } from './vkingService.js';
 import { processBatch as processTrendBatch } from './trendService.js';
+import { processWinners } from './tagExpansionService.js';
 
 // ─── Error types ───────────────────────────────────────────────────────────────
 
@@ -121,15 +122,16 @@ function updateCrawlJob(
 async function fetchAnalyticsAndClassify(
   db: Database.Database,
   listingIds: string[],
-  crawlJobId: number
-): Promise<{ fetched: number; hot: number; watch: number }> {
-  if (listingIds.length === 0) return { fetched: 0, hot: 0, watch: 0 };
+  crawlJobId: number,
+  keywordId?: number
+): Promise<{ fetched: number; hot: number; watch: number; expanded: number }> {
+  if (listingIds.length === 0) return { fetched: 0, hot: 0, watch: 0, expanded: 0 };
 
   // Check if VK1ng API key is configured
   const config = getVkingConfig(db);
   if (!config.apiKey) {
     logger.warn('VK1ng API key not configured, skipping analytics fetch');
-    return { fetched: 0, hot: 0, watch: 0 };
+    return { fetched: 0, hot: 0, watch: 0, expanded: 0 };
   }
 
   try {
@@ -139,7 +141,7 @@ async function fetchAnalyticsAndClassify(
 
     if (newIds.length === 0) {
       logger.info('All listing IDs already have recent analytics, skipping VK1ng fetch');
-      return { fetched: 0, hot: 0, watch: 0 };
+      return { fetched: 0, hot: 0, watch: 0, expanded: 0 };
     }
 
     logger.info('Fetching VK1ng analytics', { total: listingIds.length, newIds: newIds.length });
@@ -149,7 +151,7 @@ async function fetchAnalyticsAndClassify(
 
     if (analyticsData.length === 0) {
       logger.info('No analytics data returned from VK1ng');
-      return { fetched: 0, hot: 0, watch: 0 };
+      return { fetched: 0, hot: 0, watch: 0, expanded: 0 };
     }
 
     // Classify trends and save to listing_analytics
@@ -172,12 +174,30 @@ async function fetchAnalyticsAndClassify(
              (days <= 30 && hey >= 10 && views >= 40) || (sold >= 3 && days <= 90);
     }).length;
 
-    logger.info('Analytics processed', { fetched: analyticsData.length, hot, watch });
-    return { fetched: analyticsData.length, hot, watch };
+    // Tag expansion: extract keywords from winning listing tags
+    let expanded = 0;
+    if (keywordId && (hot > 0 || watch > 0)) {
+      try {
+        const expansionData = analyticsData.map(d => ({
+          etsy_listing_id: String(d.listing_id),
+          trend_status: (d.sold ?? 0) >= 3 && (d.original_creation_days ?? 999) <= 60 ? 'HOT' : 'WATCH',
+          trending_score: Math.round(((d.sold ?? 0) * 10 + (d.views_24h ?? 0) / 10 + (d.cr ?? 0) * 2) * 10) / 10,
+          tags: d.tags ?? '',
+        }));
+        expanded = processWinners(db, keywordId, expansionData);
+        if (expanded > 0) {
+          logger.info('Tag expansion: new keywords added', { keywordId, expanded });
+        }
+      } catch (err) {
+        logger.error('Tag expansion failed', { keywordId, error: (err as Error).message });
+      }
+    }
+
+    logger.info('Analytics processed', { fetched: analyticsData.length, hot, watch, expanded });
+    return { fetched: analyticsData.length, hot, watch, expanded };
   } catch (error) {
     logger.error('Failed to fetch/process analytics', { error: (error as Error).message });
-    // Don't throw — analytics failure shouldn't fail the crawl
-    return { fetched: 0, hot: 0, watch: 0 };
+    return { fetched: 0, hot: 0, watch: 0, expanded: 0 };
   }
 }
 
@@ -620,8 +640,8 @@ export async function crawlSearch(
     // Deduplicate listing IDs
     const uniqueIds = [...new Set(allListingIds)];
 
-    // Fetch VK1ng analytics + classify trends
-    const analytics = await fetchAnalyticsAndClassify(db, uniqueIds, job.id);
+    // Fetch VK1ng analytics + classify trends + tag expansion
+    const analytics = await fetchAnalyticsAndClassify(db, uniqueIds, job.id, keywordId);
 
     logger.info('Search crawl completed', {
       keywordId,
