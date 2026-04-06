@@ -139,19 +139,40 @@ export function registerAnalyticsHandlers(db: Database.Database): void {
   });
 
   // Trending listings with full data
-  ipcMain.handle('analytics:trending', (_event, params?: { status?: string; sortBy?: string; page?: number; pageSize?: number }): IPCResponse<TrendingResponse> => {
+  ipcMain.handle('analytics:trending', (_event, params?: { status?: string; productType?: string; sortBy?: string; page?: number; pageSize?: number }): IPCResponse<TrendingResponse> => {
     try {
       const pageSize = params?.pageSize ?? 20;
       const page = params?.page ?? 1;
       const offset = (page - 1) * pageSize;
 
-      let where = "WHERE la.trend_status IN ('HOT', 'WATCH')";
+      const conditions: string[] = ["la.trend_status IN ('HOT', 'WATCH')"];
       const queryParams: unknown[] = [];
 
       if (params?.status && params.status !== 'ALL') {
-        where = 'WHERE la.trend_status = ?';
+        conditions[0] = 'la.trend_status = ?';
         queryParams.push(params.status);
       }
+
+      // Product type filter — match against title or tags
+      const productKeywords: Record<string, string[]> = {
+        shirt: ['shirt', 'tshirt', 't-shirt', 'tee'],
+        hoodie: ['hoodie'],
+        sweater: ['sweater'],
+        sweatshirt: ['sweatshirt'],
+        tumbler: ['tumbler'],
+        mug: ['mug', 'cup'],
+        poster: ['poster', 'print', 'wall art', 'canvas'],
+      };
+      if (params?.productType && params.productType !== 'all' && productKeywords[params.productType]) {
+        const kws = productKeywords[params.productType];
+        const likeConditions = kws.map(() => "(LOWER(COALESCE(ss_title, '')) LIKE '%' || ? || '%' OR LOWER(COALESCE(la.tags, '')) LIKE '%' || ? || '%')");
+        conditions.push(`(${likeConditions.join(' OR ')})`);
+        for (const kw of kws) {
+          queryParams.push(kw, kw);
+        }
+      }
+
+      const where = 'WHERE ' + conditions.join(' AND ');
 
       // Sort order
       const sortMap: Record<string, string> = {

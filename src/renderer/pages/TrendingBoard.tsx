@@ -30,8 +30,31 @@ interface TrendingResponse {
 
 type SortField = 'latest' | 'score' | 'sold_24h' | 'views_24h' | 'hey_score';
 
+const PRODUCT_TYPES = [
+  { value: 'all', label: 'All Products' },
+  { value: 'shirt', label: 'Shirt / Tee' },
+  { value: 'hoodie', label: 'Hoodie' },
+  { value: 'sweater', label: 'Sweater' },
+  { value: 'sweatshirt', label: 'Sweatshirt' },
+  { value: 'tumbler', label: 'Tumbler' },
+  { value: 'mug', label: 'Mug' },
+  { value: 'poster', label: 'Poster' },
+];
+
+// Keywords that match each product type (checked against title + tags)
+const PRODUCT_KEYWORDS: Record<string, string[]> = {
+  shirt: ['shirt', 'tshirt', 't-shirt', 'tee'],
+  hoodie: ['hoodie'],
+  sweater: ['sweater'],
+  sweatshirt: ['sweatshirt'],
+  tumbler: ['tumbler'],
+  mug: ['mug', 'cup'],
+  poster: ['poster', 'print', 'wall art', 'canvas'],
+};
+
 export default function TrendingBoard() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'HOT' | 'WATCH'>('ALL');
+  const [productType, setProductType] = useState('all');
   const [sortBy, setSortBy] = useState<SortField>('latest');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -40,22 +63,31 @@ export default function TrendingBoard() {
   const { data, loading, invoke } = useIPC<TrendingResponse>('analytics:trending');
 
   useEffect(() => {
-    invoke({ status: statusFilter === 'ALL' ? undefined : statusFilter, sortBy, page, pageSize });
-  }, [statusFilter, sortBy, page]);
+    invoke({ status: statusFilter === 'ALL' ? undefined : statusFilter, productType, sortBy, page, pageSize });
+  }, [statusFilter, productType, sortBy, page]);
 
   const listings = data?.listings ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const filtered = search
-    ? listings.filter(
-        (item) =>
-          (item.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
-          (item.shop_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
-          (item.etsy_listing_id ?? '').includes(search) ||
-          (item.tags ?? '').toLowerCase().includes(search.toLowerCase())
-      )
-    : listings;
+  // Client-side filtering: search text + product type
+  let filtered = listings;
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(
+      (item) =>
+        (item.title ?? '').toLowerCase().includes(q) ||
+        (item.etsy_listing_id ?? '').includes(q) ||
+        (item.tags ?? '').toLowerCase().includes(q)
+    );
+  }
+  if (productType !== 'all') {
+    const keywords = PRODUCT_KEYWORDS[productType] || [];
+    filtered = filtered.filter((item) => {
+      const text = ((item.title ?? '') + ' ' + (item.tags ?? '')).toLowerCase();
+      return keywords.some((kw) => text.includes(kw));
+    });
+  }
 
   const openListing = (etsyListingId: string) => {
     window.open(`https://www.etsy.com/listing/${etsyListingId}`, '_blank');
@@ -79,6 +111,16 @@ export default function TrendingBoard() {
           <option value="ALL">All Statuses</option>
           <option value="HOT">HOT Only</option>
           <option value="WATCH">WATCH Only</option>
+        </select>
+
+        <select
+          value={productType}
+          onChange={(e) => { setProductType(e.target.value); setPage(1); }}
+          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+        >
+          {PRODUCT_TYPES.map((pt) => (
+            <option key={pt.value} value={pt.value}>{pt.label}</option>
+          ))}
         </select>
 
         <select
