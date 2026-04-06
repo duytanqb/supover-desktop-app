@@ -25,8 +25,7 @@ mac:
         - arm64
   category: public.app-category.business
   darkModeSupport: true
-  hardenedRuntime: true
-  gatekeeperAssess: false
+  identity: null
 
 dmg:
   artifactName: "${productName}-${version}-${arch}.dmg"
