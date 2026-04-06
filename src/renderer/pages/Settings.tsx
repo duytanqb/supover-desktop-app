@@ -4,7 +4,7 @@ import ProxyStatus from '../components/ProxyStatus';
 
 interface SettingsData {
   vking_api_key?: string;
-  ai_provider?: 'anthropic' | 'openai';
+  ai_provider?: 'anthropic' | 'openai' | 'deepseek';
   ai_api_key?: string;
   ai_model?: string;
   crawl_interval?: string;
@@ -50,7 +50,7 @@ export default function Settings() {
   // Settings state
   const [vkingKey, setVkingKey] = useState('');
   const [vkingTestStatus, setVkingTestStatus] = useState<'idle' | 'testing' | 'success' | 'failed'>('idle');
-  const [aiProvider, setAiProvider] = useState<'anthropic' | 'openai'>('anthropic');
+  const [aiProvider, setAiProvider] = useState<'anthropic' | 'openai' | 'deepseek'>('deepseek');
   const [aiKey, setAiKey] = useState('');
   const [aiModel, setAiModel] = useState('');
   const [aiTestStatus, setAiTestStatus] = useState<'idle' | 'testing' | 'success' | 'failed'>('idle');
@@ -208,6 +208,7 @@ export default function Settings() {
               onChange={(e) => setAiProvider(e.target.value as any)}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             >
+              <option value="deepseek">DeepSeek</option>
               <option value="anthropic">Anthropic</option>
               <option value="openai">OpenAI</option>
             </select>

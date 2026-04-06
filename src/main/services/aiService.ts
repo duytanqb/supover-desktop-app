@@ -3,10 +3,22 @@ import type { AIInsight } from '../../shared/types/index.js';
 import { logger } from '../utils/logger.js';
 
 interface AIConfig {
-  provider: 'anthropic' | 'openai';
+  provider: 'anthropic' | 'openai' | 'deepseek';
   apiKey: string;
   model: string;
 }
+
+const DEFAULT_MODELS: Record<string, string> = {
+  anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-4o',
+  deepseek: 'deepseek-chat',
+};
+
+const API_URLS: Record<string, string> = {
+  anthropic: 'https://api.anthropic.com/v1/messages',
+  openai: 'https://api.openai.com/v1/chat/completions',
+  deepseek: 'https://api.deepseek.com/v1/chat/completions',
+};
 
 function getAIConfig(db: Database.Database): AIConfig {
   const rows = db.prepare(
@@ -18,9 +30,9 @@ function getAIConfig(db: Database.Database): AIConfig {
     map[row.key] = row.value;
   }
 
-  const provider = (map['ai_provider'] || 'anthropic') as 'anthropic' | 'openai';
+  const provider = (map['ai_provider'] || 'deepseek') as AIConfig['provider'];
   const apiKey = map['ai_api_key'] || '';
-  const model = map['ai_model'] || (provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o');
+  const model = map['ai_model'] || DEFAULT_MODELS[provider] || 'deepseek-chat';
 
   if (!apiKey) {
     throw new Error('AI API key is not configured. Go to Settings to add your API key.');
@@ -74,8 +86,9 @@ async function callAPI(
       const data = await response.json();
       return data.content[0].text;
     } else {
-      // OpenAI
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // OpenAI / DeepSeek (OpenAI-compatible API)
+      const apiUrl = API_URLS[provider] || API_URLS.openai;
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -102,7 +115,7 @@ async function callAPI(
           return callAPI(prompt, systemPrompt, provider, apiKey, model);
         }
         const body = await response.text();
-        throw new Error(`OpenAI API error ${response.status}: ${body}`);
+        throw new Error(`${provider} API error ${response.status}: ${body}`);
       }
 
       const data = await response.json();

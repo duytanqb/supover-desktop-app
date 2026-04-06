@@ -5,7 +5,7 @@ interface OnboardingState {
   vkingKey: string;
   vkingTested: boolean;
   vkingSkipped: boolean;
-  aiProvider: 'anthropic' | 'openai';
+  aiProvider: 'anthropic' | 'openai' | 'deepseek';
   aiKey: string;
   aiModel: string;
   aiTested: boolean;
@@ -20,9 +20,9 @@ export default function Onboarding() {
     vkingKey: '',
     vkingTested: false,
     vkingSkipped: false,
-    aiProvider: 'anthropic',
+    aiProvider: 'deepseek',
     aiKey: '',
-    aiModel: 'claude-sonnet-4-6',
+    aiModel: 'deepseek-chat',
     aiTested: false,
     aiSkipped: false,
     targetsAdded: 0,
@@ -240,11 +240,11 @@ function StepAI({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  const handleProviderChange = (provider: 'anthropic' | 'openai') => {
+  const handleProviderChange = (provider: 'anthropic' | 'openai' | 'deepseek') => {
     setState((prev) => ({
       ...prev,
       aiProvider: provider,
-      aiModel: provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o',
+      aiModel: provider === 'deepseek' ? 'deepseek-chat' : provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o',
       aiTested: false,
     }));
     setTestResult(null);
@@ -290,26 +290,19 @@ function StepAI({
 
       <label className="block text-sm text-gray-300 mb-1">Provider</label>
       <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => handleProviderChange('anthropic')}
-          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors border ${
-            state.aiProvider === 'anthropic'
-              ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-              : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-          }`}
-        >
-          Anthropic
-        </button>
-        <button
-          onClick={() => handleProviderChange('openai')}
-          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors border ${
-            state.aiProvider === 'openai'
-              ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-              : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-          }`}
-        >
-          OpenAI
-        </button>
+        {(['deepseek', 'anthropic', 'openai'] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => handleProviderChange(p)}
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors border ${
+              state.aiProvider === p
+                ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+            }`}
+          >
+            {p === 'deepseek' ? 'DeepSeek' : p === 'anthropic' ? 'Anthropic' : 'OpenAI'}
+          </button>
+        ))}
       </div>
 
       <label className="block text-sm text-gray-300 mb-1">API Key</label>
@@ -317,7 +310,7 @@ function StepAI({
         type="password"
         value={state.aiKey}
         onChange={(e) => setState((prev) => ({ ...prev, aiKey: e.target.value, aiTested: false }))}
-        placeholder={`Enter your ${state.aiProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key`}
+        placeholder={`Enter your ${state.aiProvider.charAt(0).toUpperCase() + state.aiProvider.slice(1)} API key`}
         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3"
       />
 

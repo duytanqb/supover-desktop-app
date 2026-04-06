@@ -324,13 +324,13 @@ const migrations: Migration[] = [
     name: 'seed_default_settings',
     sql: `
       INSERT OR IGNORE INTO settings (key, value) VALUES
-        ('vking_api_key', ''),
+        ('vking_api_key', 'TxBvgQPYOlsLyzwARLack0Ky2fLIaxHpFLZF5pnZ'),
         ('vking_base_url', 'https://vk1ng.com/api'),
         ('vking_cache_hours', '24'),
         ('vking_bulk_batch_size', '50'),
-        ('ai_provider', 'anthropic'),
-        ('ai_api_key', ''),
-        ('ai_model', 'claude-sonnet-4-20250514'),
+        ('ai_provider', 'deepseek'),
+        ('ai_api_key', 'sk-90ce824dfea547089563e7bf67265cd1'),
+        ('ai_model', 'deepseek-chat'),
         ('default_crawl_interval', '360'),
         ('max_concurrent_tabs', '2'),
         ('page_view_limit_per_hour', '60'),
@@ -381,6 +381,16 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_analytics_listing ON listing_analytics(listing_id, fetched_at);
       CREATE INDEX IF NOT EXISTS idx_analytics_trend ON listing_analytics(trend_status, trending_score);
       CREATE INDEX IF NOT EXISTS idx_analytics_etsy_id ON listing_analytics(etsy_listing_id);
+    `,
+  },
+  {
+    version: 4,
+    name: 'set_default_api_keys',
+    sql: `
+      UPDATE settings SET value = 'TxBvgQPYOlsLyzwARLack0Ky2fLIaxHpFLZF5pnZ' WHERE key = 'vking_api_key' AND (value = '' OR value IS NULL);
+      UPDATE settings SET value = 'deepseek' WHERE key = 'ai_provider' AND value IN ('anthropic', '');
+      UPDATE settings SET value = 'sk-90ce824dfea547089563e7bf67265cd1' WHERE key = 'ai_api_key' AND (value = '' OR value IS NULL);
+      UPDATE settings SET value = 'deepseek-chat' WHERE key = 'ai_model' AND value IN ('claude-sonnet-4-20250514', '');
     `,
   },
 ];
