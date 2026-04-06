@@ -46,6 +46,7 @@ import { processBatch as processTrendBatch } from './trendService.js';
 import { processWinners } from './tagExpansionService.js';
 import { diffAnalytics, type AnalyticsRecord } from './diffService.js';
 import { createFromDiff } from './alertService.js';
+import { discoverWinningShops } from './shopDiscoveryService.js';
 
 // ─── Error types ───────────────────────────────────────────────────────────────
 
@@ -218,7 +219,21 @@ async function fetchAnalyticsAndClassify(
       }
     }
 
-    logger.info('Analytics processed', { fetched: analyticsData.length, hot, watch, expanded });
+    // Shop discovery: auto-add shops with multiple HOT/WATCH listings
+    let discovered = 0;
+    if (keywordId && (hot > 0 || watch > 0)) {
+      try {
+        const discovery = discoverWinningShops(db);
+        discovered = discovery.added.length;
+        if (discovered > 0) {
+          logger.info('Shop discovery: new shops auto-added', { shops: discovery.added });
+        }
+      } catch (err) {
+        logger.error('Shop discovery failed', { error: (err as Error).message });
+      }
+    }
+
+    logger.info('Analytics processed', { fetched: analyticsData.length, hot, watch, expanded, discovered });
     return { fetched: analyticsData.length, hot, watch, expanded };
   } catch (error) {
     logger.error('Failed to fetch/process analytics', { error: (error as Error).message });

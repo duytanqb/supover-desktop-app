@@ -187,6 +187,9 @@ export default function ShopList() {
                     >
                       {shop.shop_name}
                     </button>
+                    {shop.notes?.includes('auto_discovery') && (
+                      <span className="ml-2 text-xs text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">auto</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${statusStyles[shop.status]}`}>
