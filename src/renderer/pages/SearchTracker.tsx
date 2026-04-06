@@ -154,7 +154,7 @@ export default function SearchTracker() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-100">Keyword Tracking</h1>
+        <h1 className="text-2xl font-bold text-gray-100">Keywords</h1>
         <button
           onClick={() => { setShowForm(!showForm); setAddError(null); }}
           className="px-4 py-2 rounded-lg font-medium text-sm bg-indigo-500 text-white hover:opacity-90 transition-opacity"
