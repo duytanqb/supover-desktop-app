@@ -108,6 +108,7 @@ export default function TrendingBoard() {
           <thead>
             <tr className="bg-gray-800">
               <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium w-10">#</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium w-14">Img</th>
               <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Listing ID</th>
               <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Title</th>
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Sold 24h</th>
@@ -121,13 +122,13 @@ export default function TrendingBoard() {
           <tbody>
             {loading && filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 text-sm">
                   Loading...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 text-sm">
                   No trending listings found. Crawl keywords or shops to discover trends.
                 </td>
               </tr>
@@ -141,6 +142,15 @@ export default function TrendingBoard() {
                 >
                   <td className="px-4 py-3 text-sm text-gray-500">
                     {(page - 1) * pageSize + idx + 1}
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="w-10 h-10 rounded bg-gray-800 overflow-hidden flex-shrink-0">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs">—</div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <button
