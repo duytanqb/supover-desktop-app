@@ -1,7 +1,13 @@
 export function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return 'never';
 
-  const date = new Date(dateStr);
+  // SQLite datetime('now') stores UTC without 'Z' suffix.
+  // Append 'Z' so JavaScript parses it as UTC, then displays in local timezone.
+  const normalized = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+  const date = new Date(normalized);
+
+  if (isNaN(date.getTime())) return 'never';
+
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
 
