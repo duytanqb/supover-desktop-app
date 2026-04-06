@@ -254,16 +254,16 @@ export default function SearchTracker() {
 
       {/* Keywords table */}
       <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-x-auto">
-        <table className="w-full table-fixed">
+        <table className="w-full">
           <thead>
             <tr className="bg-gray-800">
-              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[30%]">Keyword</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[10%]">Status</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[10%]">Cron</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[14%]">Last Crawled</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[7%]">HOT</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[9%]">WATCH</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[20%]">Actions</th>
+              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Keyword</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Status</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Cron</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Last Crawled</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">HOT</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">WATCH</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
