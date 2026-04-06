@@ -254,30 +254,28 @@ export default function SearchTracker() {
 
       {/* Keywords table */}
       <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full table-fixed">
           <thead>
             <tr className="bg-gray-800">
-              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium">Keyword</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Source</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Depth</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Status</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Cron</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Last Crawled</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">HOT</th>
-              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">WATCH</th>
-              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Actions</th>
+              <th className="text-left px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[30%]">Keyword</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[10%]">Status</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[10%]">Cron</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[14%]">Last Crawled</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[7%]">HOT</th>
+              <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[9%]">WATCH</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium w-[20%]">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && !keywords ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500 text-sm">
                   Loading...
                 </td>
               </tr>
             ) : (keywords ?? []).length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500 text-sm">
                   No keywords tracked yet. Add a keyword to start discovering trends.
                 </td>
               </tr>
@@ -290,13 +288,12 @@ export default function SearchTracker() {
                     } ${expandedRow === kw.id ? 'bg-gray-800/70' : ''}`}
                     onClick={() => handleRowClick(kw.id)}
                   >
-                    <td className="px-4 py-3 text-sm font-medium text-gray-200">{kw.keyword}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${sourceStyles[kw.source || kw.expansion_source] || sourceStyles.user_input}`}>
-                        {sourceLabels[kw.source || kw.expansion_source] || kw.source || 'user'}
-                      </span>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-200 truncate">
+                      {kw.keyword}
+                      {kw.expansion_source === 'tag_expansion' && (
+                        <span className="ml-2 text-xs text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">tag</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-400 text-center">{kw.depth}</td>
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`text-xs px-2 py-0.5 rounded ${
@@ -354,7 +351,7 @@ export default function SearchTracker() {
                   {/* Expanded search results */}
                   {expandedRow === kw.id && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-4 bg-gray-800/30">
+                      <td colSpan={7} className="px-4 py-4 bg-gray-800/30">
                         {searchResults && searchResults.length > 0 ? (
                           <div className="space-y-2">
                             <div className="text-xs text-gray-500 mb-2">
