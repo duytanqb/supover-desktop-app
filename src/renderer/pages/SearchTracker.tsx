@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useIPC } from '../hooks/useIPC';
 import KeywordTree, { KeywordNode } from '../components/KeywordTree';
 import TrendBadge from '../components/TrendBadge';
@@ -281,7 +281,7 @@ export default function SearchTracker() {
               </tr>
             ) : (
               (keywords ?? []).map((kw, idx) => (
-                <tbody key={kw.id}>
+                <React.Fragment key={kw.id}>
                   <tr
                     className={`border-t border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors ${
                       idx % 2 === 1 ? 'bg-gray-900/50' : ''
@@ -383,7 +383,7 @@ export default function SearchTracker() {
                       </td>
                     </tr>
                   )}
-                </tbody>
+                </React.Fragment>
               ))
             )}
           </tbody>
