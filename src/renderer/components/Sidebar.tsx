@@ -4,6 +4,7 @@ import { usePolling } from '../hooks/usePolling';
 interface CrawlStatus {
   isRunning: boolean;
   isPaused: boolean;
+  isBlackout: boolean;
   queueLength: number;
   currentTarget: string | null;
   nextCheckIn: number;
@@ -21,10 +22,10 @@ const navItems = [
 export default function Sidebar() {
   const { data: crawlStatus } = usePolling<CrawlStatus>('crawl:status', 10_000);
 
-  const currentStatus = crawlStatus?.currentTarget ? 'crawling' : crawlStatus?.isPaused ? 'paused' : crawlStatus?.isRunning ? 'running' : 'idle';
+  const currentStatus = crawlStatus?.currentTarget ? 'crawling' : crawlStatus?.isBlackout ? 'blackout' : crawlStatus?.isPaused ? 'paused' : crawlStatus?.isRunning ? 'running' : 'idle';
 
-  const statusColor = { crawling: 'bg-green-500', running: 'bg-green-500', paused: 'bg-yellow-500', idle: 'bg-gray-500' };
-  const statusLabel = { crawling: 'Crawling', running: 'Running', paused: 'Paused', idle: 'Idle' };
+  const statusColor = { crawling: 'bg-green-500', running: 'bg-green-500', paused: 'bg-yellow-500', blackout: 'bg-orange-500', idle: 'bg-gray-500' };
+  const statusLabel = { crawling: 'Crawling', running: 'Running', paused: 'Paused', blackout: 'Blackout 12-21h VN', idle: 'Idle' };
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-gray-900 border-r border-gray-800 flex flex-col z-50">

@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js';
 export interface SchedulerStatus {
   isRunning: boolean;
   isPaused: boolean;
+  isBlackout: boolean;
   consecutiveBlocks: number;
   currentTarget: string | null;
   nextCheckIn: number; // seconds until next check
@@ -71,8 +72,29 @@ export class SchedulerService {
     logger.info('Scheduler stopped');
   }
 
+  /**
+   * Check if current time is in the blackout window.
+   * HeyEtsy resets data between 12:00–21:00 Vietnam time (UTC+7),
+   * so crawling during this period yields bad data for trend detection.
+   */
+  private isBlackoutPeriod(): boolean {
+    const now = new Date();
+    // Vietnam is UTC+7
+    const vnHour = (now.getUTCHours() + 7) % 24;
+    // Blackout: 12:00 to 21:00 VN time
+    return vnHour >= 12 && vnHour < 21;
+  }
+
   private tick(): void {
     if (this.isPaused || this.isCrawling) return;
+
+    if (this.isBlackoutPeriod()) {
+      const now = new Date();
+      const vnHour = (now.getUTCHours() + 7) % 24;
+      logger.info(`Scheduler skipping: blackout period (VN time: ${vnHour}:00, active 21:00-12:00)`);
+      return;
+    }
+
     this.lastCheckTime = Date.now();
     this.processNextDue().catch(err => {
       logger.error('Scheduler tick error', { error: (err as Error).message });
@@ -209,6 +231,7 @@ export class SchedulerService {
     return {
       isRunning: this.isRunning,
       isPaused: this.isPaused,
+      isBlackout: this.isBlackoutPeriod(),
       consecutiveBlocks: this.consecutiveBlocks,
       currentTarget: this.currentTarget,
       nextCheckIn,

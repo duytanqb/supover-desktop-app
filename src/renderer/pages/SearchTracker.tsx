@@ -14,10 +14,18 @@ interface Keyword {
   status: string;
   max_pages: number;
   auto_expand: number;
+  crawl_interval_minutes: number;
   last_crawled: string | null;
   hot_count: number;
   watch_count: number;
 }
+
+const INTERVAL_OPTIONS = [
+  { value: 180, label: '3h' },
+  { value: 360, label: '6h' },
+  { value: 720, label: '12h' },
+  { value: 1440, label: '24h' },
+];
 
 interface SearchResult {
   id: number;
@@ -57,6 +65,7 @@ export default function SearchTracker() {
   const [formKeyword, setFormKeyword] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formMaxPages, setFormMaxPages] = useState(3);
+  const [formInterval, setFormInterval] = useState(180);
   const [formAutoExpand, setFormAutoExpand] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -64,6 +73,7 @@ export default function SearchTracker() {
   const { invoke: addKeyword } = useIPC('keyword:add');
   const { invoke: crawlKeyword } = useIPC('keyword:crawl-now');
   const { invoke: deleteKeyword } = useIPC('keyword:delete');
+  const { invoke: updateKeyword } = useIPC('keyword:update');
   const { data: searchResults, invoke: loadSearchResults } = useIPC<SearchResult[]>('snapshot:search-history');
   const { data: expansionTree, invoke: loadTree } = useIPC<KeywordNode[]>('expansion:tree');
 
@@ -80,6 +90,7 @@ export default function SearchTracker() {
       keyword: formKeyword.trim(),
       category: formCategory || null,
       max_pages: formMaxPages,
+      crawl_interval_minutes: formInterval,
       auto_expand: formAutoExpand,
     });
 
@@ -206,6 +217,18 @@ export default function SearchTracker() {
                 className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
               />
             </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Cron Interval</label>
+              <select
+                value={formInterval}
+                onChange={(e) => setFormInterval(Number(e.target.value))}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+              >
+                {INTERVAL_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>Every {opt.label}</option>
+                ))}
+              </select>
+            </div>
             <div className="flex items-center gap-2 mt-5">
               <input
                 type="checkbox"
@@ -238,6 +261,7 @@ export default function SearchTracker() {
               <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Source</th>
               <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Depth</th>
               <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Status</th>
+              <th className="text-center px-4 py-3 text-xs uppercase text-gray-400 font-medium">Cron</th>
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">Last Crawled</th>
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">HOT</th>
               <th className="text-right px-4 py-3 text-xs uppercase text-gray-400 font-medium">WATCH</th>
@@ -247,13 +271,13 @@ export default function SearchTracker() {
           <tbody>
             {loading && !keywords ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
                   Loading...
                 </td>
               </tr>
             ) : (keywords ?? []).length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
                   No keywords tracked yet. Add a keyword to start discovering trends.
                 </td>
               </tr>
@@ -286,6 +310,20 @@ export default function SearchTracker() {
                         {kw.status}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={kw.crawl_interval_minutes || 180}
+                        onChange={(e) => {
+                          updateKeyword({ id: kw.id, crawl_interval_minutes: Number(e.target.value) });
+                          loadKeywords();
+                        }}
+                        className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:ring-1 focus:ring-indigo-500 outline-none"
+                      >
+                        {INTERVAL_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-400 text-right">
                       {kw.last_crawled ? formatRelativeTime(kw.last_crawled) : 'Never'}
                     </td>
@@ -316,7 +354,7 @@ export default function SearchTracker() {
                   {/* Expanded search results */}
                   {expandedRow === kw.id && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-4 bg-gray-800/30">
+                      <td colSpan={9} className="px-4 py-4 bg-gray-800/30">
                         {searchResults && searchResults.length > 0 ? (
                           <div className="space-y-2">
                             <div className="text-xs text-gray-500 mb-2">

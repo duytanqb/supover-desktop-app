@@ -58,7 +58,7 @@ export function registerKeywordHandlers(db: Database.Database): void {
       ).run(
         keyword,
         params.category ?? null,
-        params.crawl_interval_minutes ?? 720,
+        params.crawl_interval_minutes ?? 180,
         params.max_pages ?? 3,
         params.auto_expand !== undefined ? (params.auto_expand ? 1 : 0) : 1,
         params.notes ?? null,
