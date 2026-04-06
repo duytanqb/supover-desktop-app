@@ -44,6 +44,8 @@ import type { ListingFromParse, ShopIndexData, SearchIndexData } from './parserS
 import { getBulkListings, filterNewIds, getVkingConfig } from './vkingService.js';
 import { processBatch as processTrendBatch } from './trendService.js';
 import { processWinners } from './tagExpansionService.js';
+import { diffAnalytics, type AnalyticsRecord } from './diffService.js';
+import { createFromDiff } from './alertService.js';
 
 // ─── Error types ───────────────────────────────────────────────────────────────
 
@@ -154,8 +156,31 @@ async function fetchAnalyticsAndClassify(
       return { fetched: 0, hot: 0, watch: 0, expanded: 0 };
     }
 
+    // Get old analytics for diff comparison BEFORE saving new ones
+    const etsyIds = analyticsData.map(d => String(d.listing_id));
+    const placeholders = etsyIds.map(() => '?').join(',');
+    const oldAnalytics = etsyIds.length > 0
+      ? db.prepare(`SELECT etsy_listing_id, trend_status, sold_24h, listing_id FROM listing_analytics WHERE etsy_listing_id IN (${placeholders})`).all(...etsyIds) as AnalyticsRecord[]
+      : [];
+
     // Classify trends and save to listing_analytics
     processTrendBatch(db, analyticsData, crawlJobId);
+
+    // Diff old vs new analytics → create alerts
+    const newAnalytics: AnalyticsRecord[] = analyticsData.map(d => ({
+      etsy_listing_id: String(d.listing_id),
+      trend_status: (d.sold ?? 0) >= 3 && (d.original_creation_days ?? 999) <= 60 ? 'HOT'
+        : ((d.sold ?? 0) >= 2 || (d.views_24h ?? 0) >= 120 || ((d.views_24h ?? 0) >= 80 && (d.hey ?? 0) >= 8)
+          || ((d.original_creation_days ?? 999) <= 30 && (d.hey ?? 0) >= 10 && (d.views_24h ?? 0) >= 40)
+          || ((d.sold ?? 0) >= 3 && (d.original_creation_days ?? 999) <= 90)) ? 'WATCH' : 'SKIP',
+      sold_24h: d.sold ?? 0,
+    }));
+
+    const diffs = diffAnalytics(oldAnalytics, newAnalytics);
+    if (diffs.length > 0) {
+      const alertCount = createFromDiff(db, diffs, undefined, keywordId);
+      logger.info('Alerts created from analytics diff', { alertCount, diffs: diffs.length });
+    }
 
     // Count HOT and WATCH
     const hot = analyticsData.filter(d => {

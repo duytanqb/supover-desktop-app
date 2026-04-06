@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { logger } from '../utils/logger.js';
+import { runDailyCleanup } from './cleanupService.js';
 
 /**
  * Scheduler Service — automatically crawls shops and keywords on their configured intervals.
@@ -35,6 +36,7 @@ export class SchedulerService {
   private currentTarget: string | null = null;
   private lastCheckTime = 0;
   private checkIntervalMs = 60_000; // 60 seconds
+  private cleanupTimer: NodeJS.Timeout | null = null;
   private db: Database.Database;
 
   constructor(db: Database.Database) {
@@ -50,7 +52,11 @@ export class SchedulerService {
       this.tick();
     }, this.checkIntervalMs);
 
-    logger.info('Scheduler started (check every 60s)');
+    // Daily cleanup — run on start then every 24h
+    this.runCleanup();
+    this.cleanupTimer = setInterval(() => this.runCleanup(), 24 * 60 * 60_000);
+
+    logger.info('Scheduler started (check every 60s, cleanup every 24h)');
 
     // Run first check after a short delay (let app fully init)
     setTimeout(() => this.tick(), 5000);
@@ -64,6 +70,10 @@ export class SchedulerService {
     if (this.pauseTimer) {
       clearTimeout(this.pauseTimer);
       this.pauseTimer = null;
+    }
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
     }
     this.isRunning = false;
     this.isPaused = false;
@@ -218,6 +228,15 @@ export class SchedulerService {
       this.pauseTimer = null;
     }
     logger.info('Scheduler resumed');
+  }
+
+  private runCleanup(): void {
+    try {
+      const result = runDailyCleanup(this.db);
+      logger.info('Daily cleanup completed', result);
+    } catch (err) {
+      logger.error('Daily cleanup failed', { error: (err as Error).message });
+    }
   }
 
   getStatus(): SchedulerStatus {

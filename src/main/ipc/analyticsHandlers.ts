@@ -32,10 +32,38 @@ interface TrendingResponse {
 }
 
 interface DashboardData {
-  hotCount: number;
-  watchCount: number;
-  topTrending: TrendingItem[];
-  recentVelocitySpikes: TrendingItem[];
+  stats: {
+    totalShops: number;
+    activeKeywords: number;
+    hotListings: number;
+    unreadAlerts: number;
+  };
+  topTrending: Array<{
+    id: number;
+    etsyListingId: string;
+    title: string;
+    imageUrl?: string | null;
+    price?: number | null;
+    trendStatus?: string;
+    sold24h?: number;
+    views24h?: number;
+    heyScore?: number;
+    shopName?: string;
+  }>;
+  recentAlerts: Array<{
+    id: number;
+    type: string;
+    severity: string;
+    old_value?: string;
+    new_value?: string;
+    is_read: boolean;
+    created_at: string;
+  }>;
+  crawlStatus: {
+    status: string;
+    jobsInQueue: number;
+    currentJob?: string;
+  };
 }
 
 // Shared SQL for trending queries — joins analytics with listing snapshots for title/price/image
@@ -146,25 +174,63 @@ export function registerAnalyticsHandlers(db: Database.Database): void {
   // Dashboard aggregates
   ipcMain.handle('analytics:dashboard', (_event): IPCResponse<DashboardData> => {
     try {
-      const hotCount = (db.prepare(
-        "SELECT COUNT(*) as count FROM listing_analytics WHERE trend_status = 'HOT'"
-      ).get() as { count: number }).count;
+      // Stats
+      const totalShops = (db.prepare("SELECT COUNT(*) as c FROM shops WHERE status != 'archived'").get() as { c: number }).c;
+      const activeKeywords = (db.prepare("SELECT COUNT(*) as c FROM search_keywords WHERE status = 'active'").get() as { c: number }).c;
+      const hotListings = (db.prepare("SELECT COUNT(*) as c FROM listing_analytics WHERE trend_status = 'HOT'").get() as { c: number }).c;
+      const unreadAlerts = (db.prepare("SELECT COUNT(*) as c FROM alerts WHERE is_read = 0").get() as { c: number }).c;
 
-      const watchCount = (db.prepare(
-        "SELECT COUNT(*) as count FROM listing_analytics WHERE trend_status = 'WATCH'"
-      ).get() as { count: number }).count;
-
-      const topTrending = db.prepare(
+      // Top trending (mapped to ListingData shape)
+      const trendingRows = db.prepare(
         `${TRENDING_SELECT} WHERE la.trend_status IN ('HOT', 'WATCH') ORDER BY la.trending_score DESC LIMIT 5`
       ).all() as TrendingItem[];
 
-      const recentVelocitySpikes = db.prepare(
-        `${TRENDING_SELECT} WHERE la.sold_24h > 0 AND la.trend_status IN ('HOT', 'WATCH') ORDER BY la.sold_24h DESC LIMIT 5`
-      ).all() as TrendingItem[];
+      const topTrending = trendingRows.map(r => ({
+        id: r.id,
+        etsyListingId: r.etsy_listing_id,
+        title: r.title || `Listing #${r.etsy_listing_id}`,
+        imageUrl: r.image_url,
+        price: r.price,
+        trendStatus: r.trend_status,
+        sold24h: r.sold_24h,
+        views24h: r.views_24h,
+        heyScore: r.hey_score,
+        shopName: r.shop_name || undefined,
+      }));
+
+      // Recent alerts
+      const recentAlerts = db.prepare(
+        "SELECT id, alert_type as type, severity, old_value, new_value, is_read, created_at FROM alerts ORDER BY created_at DESC LIMIT 10"
+      ).all() as Array<{ id: number; type: string; severity: string; old_value: string; new_value: string; is_read: number; created_at: string }>;
+
+      const mappedAlerts = recentAlerts.map(a => ({
+        ...a,
+        is_read: a.is_read === 1,
+      }));
+
+      // Crawl status from scheduler
+      let crawlStatusData = { status: 'idle', jobsInQueue: 0, currentJob: undefined as string | undefined };
+      try {
+        const { getScheduler } = require('../services/schedulerService.js');
+        const scheduler = getScheduler();
+        if (scheduler) {
+          const s = scheduler.getStatus();
+          crawlStatusData = {
+            status: s.currentTarget ? 'running' : s.isBlackout ? 'blackout' : s.isPaused ? 'paused' : s.isRunning ? 'running' : 'idle',
+            jobsInQueue: s.queueLength,
+            currentJob: s.currentTarget ?? undefined,
+          };
+        }
+      } catch { /* ignore */ }
 
       return {
         success: true,
-        data: { hotCount, watchCount, topTrending, recentVelocitySpikes },
+        data: {
+          stats: { totalShops, activeKeywords, hotListings, unreadAlerts },
+          topTrending,
+          recentAlerts: mappedAlerts,
+          crawlStatus: crawlStatusData,
+        },
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
