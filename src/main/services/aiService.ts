@@ -346,6 +346,158 @@ Return ONLY a JSON array of strings, nothing else. Example: ["keyword one", "key
   return filtered;
 }
 
+/**
+ * Generate a market report from the last 100 listings with analytics.
+ * Single button: analyzes recent HOT/WATCH listings, keywords, niches, and trends.
+ */
+export async function generateMarketReport(db: Database.Database): Promise<AIInsight> {
+  const config = getAIConfig(db);
+
+  // 1. Get last 100 listings with analytics (most recent first)
+  const listings = db.prepare(`
+    SELECT
+      la.etsy_listing_id,
+      la.sold_24h,
+      la.views_24h,
+      la.hey_score,
+      la.days_old,
+      la.trending_score,
+      la.trend_status,
+      la.total_sold,
+      la.conversion_rate,
+      la.tags,
+      la.categories,
+      la.fetched_at,
+      COALESCE(ss.title, '') as title,
+      COALESCE(ss.shop_name, '') as shop_name
+    FROM listing_analytics la
+    LEFT JOIN (
+      SELECT etsy_listing_id, title, shop_name
+      FROM search_snapshots
+      WHERE id IN (SELECT MAX(id) FROM search_snapshots GROUP BY etsy_listing_id)
+    ) ss ON ss.etsy_listing_id = la.etsy_listing_id
+    WHERE la.trend_status IN ('HOT', 'WATCH')
+    ORDER BY la.fetched_at DESC
+    LIMIT 100
+  `).all() as any[];
+
+  if (listings.length === 0) {
+    throw new Error('No HOT/WATCH listings found. Crawl some keywords first.');
+  }
+
+  // 2. Get keyword stats
+  const keywordStats = db.prepare(`
+    SELECT sk.keyword,
+      COUNT(DISTINCT ss.etsy_listing_id) as total_listings,
+      SUM(CASE WHEN la.trend_status = 'HOT' THEN 1 ELSE 0 END) as hot_count,
+      SUM(CASE WHEN la.trend_status = 'WATCH' THEN 1 ELSE 0 END) as watch_count
+    FROM search_keywords sk
+    JOIN search_snapshots ss ON ss.keyword_id = sk.id
+    JOIN listing_analytics la ON la.etsy_listing_id = ss.etsy_listing_id
+    WHERE sk.status = 'active' AND la.trend_status IN ('HOT', 'WATCH')
+    GROUP BY sk.keyword
+    ORDER BY hot_count DESC
+    LIMIT 20
+  `).all() as any[];
+
+  // 3. Extract common tags/niches from HOT listings
+  const hotListings = listings.filter((l: any) => l.trend_status === 'HOT');
+  const watchListings = listings.filter((l: any) => l.trend_status === 'WATCH');
+
+  // Extract top tags
+  const tagCounts: Record<string, number> = {};
+  for (const l of hotListings) {
+    if (!l.tags) continue;
+    for (const tag of l.tags.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean)) {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+    }
+  }
+  const topTags = Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([tag, count]) => `${tag} (${count})`);
+
+  // Extract top shops
+  const shopCounts: Record<string, number> = {};
+  for (const l of listings) {
+    if (!l.shop_name) continue;
+    shopCounts[l.shop_name] = (shopCounts[l.shop_name] || 0) + 1;
+  }
+  const topShops = Object.entries(shopCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([shop, count]) => `${shop} (${count} listings)`);
+
+  // 4. Build prompt
+  const prompt = `
+## DATA: Last ${listings.length} trending Etsy POD listings
+
+### Summary
+- HOT listings: ${hotListings.length}
+- WATCH listings: ${watchListings.length}
+- Avg sold_24h (HOT): ${hotListings.length > 0 ? (hotListings.reduce((s: number, l: any) => s + l.sold_24h, 0) / hotListings.length).toFixed(1) : 0}
+- Avg views_24h (HOT): ${hotListings.length > 0 ? (hotListings.reduce((s: number, l: any) => s + l.views_24h, 0) / hotListings.length).toFixed(0) : 0}
+- Avg HEY score (HOT): ${hotListings.length > 0 ? (hotListings.reduce((s: number, l: any) => s + l.hey_score, 0) / hotListings.length).toFixed(1) : 0}
+
+### Keywords performance
+${keywordStats.map((k: any) => `- "${k.keyword}": ${k.hot_count} HOT, ${k.watch_count} WATCH (${k.total_listings} total)`).join('\n')}
+
+### Top tags from HOT listings
+${topTags.join(', ')}
+
+### Top shops with trending products
+${topShops.join('\n')}
+
+### Top 15 HOT listings (by trending score)
+${hotListings.slice(0, 15).map((l: any, i: number) =>
+  `${i + 1}. "${l.title}" | sold:${l.sold_24h} | views:${l.views_24h} | HEY:${l.hey_score} | age:${l.days_old}d | score:${l.trending_score} | shop:${l.shop_name}`
+).join('\n')}
+
+### Top 10 WATCH listings (potential breakout)
+${watchListings.slice(0, 10).map((l: any, i: number) =>
+  `${i + 1}. "${l.title}" | sold:${l.sold_24h} | views:${l.views_24h} | HEY:${l.hey_score} | age:${l.days_old}d`
+).join('\n')}
+
+## ANALYZE AND PROVIDE:
+
+1. **HOT Niches Right Now** — What product niches/themes are selling best? Group by theme (e.g., "BTS merch", "book lover", "cat themed"). Rank by strength.
+
+2. **Trending Keywords** — Which search keywords are producing the most winners? Which are saturated vs. opportunity?
+
+3. **Design Insights** — What design styles, themes, and formats are working? (e.g., vintage, comfort colors, minimalist, pop culture references)
+
+4. **New Opportunities** — Based on the tags and emerging WATCH listings, what niches should a POD seller explore next?
+
+5. **Recommended Actions** — Top 5 specific things to do this week to capitalize on these trends.
+
+Be specific with product names, themes, and data. This report is for a POD team of 100 sellers.
+`;
+
+  const systemPrompt = `You are an expert Etsy Print-on-Demand market analyst. You analyze real-time listing data to identify profitable niches, trending designs, and market opportunities. Your reports are actionable, data-driven, and specific. Use bullet points and clear sections. Focus on what to SELL, not general advice.`;
+
+  logger.info(`Generating market report from ${listings.length} listings with ${config.provider}/${config.model}`);
+  const content = await callAPI(prompt, systemPrompt, config.provider, config.apiKey, config.model);
+
+  // 5. Save insight
+  const dataContext = JSON.stringify({
+    totalListings: listings.length,
+    hotCount: hotListings.length,
+    watchCount: watchListings.length,
+    keywordsAnalyzed: keywordStats.length,
+    generatedAt: new Date().toISOString(),
+  });
+
+  const result = db.prepare(`
+    INSERT INTO ai_insights (insight_type, content, data_context, model_used)
+    VALUES ('niche_discovery', ?, ?, ?)
+  `).run(content, dataContext, config.model);
+
+  const insight = db.prepare('SELECT * FROM ai_insights WHERE id = ?').get(result.lastInsertRowid) as AIInsight;
+  logger.info(`Market report saved, insight id=${insight.id}`);
+
+  return insight;
+}
+
 export async function testConnection(
   provider: string,
   apiKey: string,

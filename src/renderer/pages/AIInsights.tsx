@@ -2,215 +2,124 @@ import { useState, useEffect } from 'react';
 import { useIPC } from '../hooks/useIPC';
 import { formatRelativeTime } from '../utils/formatTime';
 
-type InsightType = 'all' | 'shop_summary' | 'keyword_analysis' | 'niche_discovery';
-
 interface Insight {
   id: number;
-  type: 'shop_summary' | 'keyword_analysis' | 'niche_discovery';
-  target_name: string;
+  insight_type: string;
   content: string;
-  is_pinned: boolean;
+  data_context: string;
+  model_used: string;
+  is_pinned: number;
   created_at: string;
 }
 
-interface InsightResponse {
-  insights: Insight[];
-}
-
-interface ShopOption {
-  id: number;
-  shop_name: string;
-}
-
-interface KeywordOption {
-  id: number;
-  keyword: string;
-}
-
-const typeStyles: Record<string, string> = {
-  shop_summary: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  keyword_analysis: 'bg-green-500/20 text-green-400 border-green-500/30',
-  niche_discovery: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-};
-
-const typeLabels: Record<string, string> = {
-  shop_summary: 'Shop Summary',
-  keyword_analysis: 'Keyword Analysis',
-  niche_discovery: 'Niche Discovery',
-};
-
 export default function AIInsights() {
-  const [activeTab, setActiveTab] = useState<InsightType>('all');
-  const [showShopDropdown, setShowShopDropdown] = useState(false);
-  const [showKeywordDropdown, setShowKeywordDropdown] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: insightData, invoke: loadInsights, loading } = useIPC<InsightResponse>('ai:insights-list');
-  const { data: shops, invoke: loadShops } = useIPC<ShopOption[]>('shop:list');
-  const { data: keywords, invoke: loadKeywords } = useIPC<KeywordOption[]>('keyword:list');
-  const { invoke: analyzeShop } = useIPC('ai:analyze-shop');
-  const { invoke: analyzeKeyword } = useIPC('ai:analyze-keyword');
+  const { data: insights, invoke: loadInsights, loading } = useIPC<Insight[]>('ai:insights-list');
+  const { invoke: generateReport } = useIPC('ai:market-report');
 
   useEffect(() => {
-    loadInsights({ type: activeTab === 'all' ? undefined : activeTab });
-    loadShops();
-    loadKeywords();
-  }, [activeTab]);
+    loadInsights();
+  }, []);
 
-  const insights = insightData?.insights ?? [];
-
-  const handleAnalyzeShop = async (shopId: number) => {
-    setShowShopDropdown(false);
-    await analyzeShop({ shopId });
-    loadInsights({ type: activeTab === 'all' ? undefined : activeTab });
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const result = await generateReport();
+      if (result.success) {
+        loadInsights();
+      } else {
+        setError(result.error || 'Failed to generate report');
+      }
+    } catch {
+      setError('Failed to generate report');
+    } finally {
+      setGenerating(false);
+    }
   };
 
-  const handleAnalyzeKeyword = async (keywordId: number) => {
-    setShowKeywordDropdown(false);
-    await analyzeKeyword({ keywordId });
-    loadInsights({ type: activeTab === 'all' ? undefined : activeTab });
-  };
-
-  const tabs: { key: InsightType; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'shop_summary', label: 'Shop Summary' },
-    { key: 'keyword_analysis', label: 'Keyword Analysis' },
-    { key: 'niche_discovery', label: 'Niche Discovery' },
-  ];
+  const list = insights ?? [];
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <h1 className="text-2xl font-bold text-gray-100">AI Insights</h1>
-
-      {/* Filter tabs + actions */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 bg-gray-900 rounded-lg p-1 border border-gray-800">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                activeTab === tab.key
-                  ? 'bg-gray-800 text-gray-100'
-                  : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Analyze Shop */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowShopDropdown(!showShopDropdown);
-                setShowKeywordDropdown(false);
-              }}
-              className="px-4 py-2 rounded-lg font-medium text-sm bg-indigo-500 text-white hover:opacity-90 transition-opacity"
-            >
-              Analyze Shop
-            </button>
-            {showShopDropdown && (
-              <div className="absolute right-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 max-h-60 overflow-y-auto">
-                {(shops ?? []).length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-gray-500">No shops available</p>
-                ) : (
-                  (shops ?? []).map((shop) => (
-                    <button
-                      key={shop.id}
-                      onClick={() => handleAnalyzeShop(shop.id)}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
-                    >
-                      {shop.shop_name}
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Analyze Keyword */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowKeywordDropdown(!showKeywordDropdown);
-                setShowShopDropdown(false);
-              }}
-              className="px-4 py-2 rounded-lg font-medium text-sm bg-purple-500 text-white hover:opacity-90 transition-opacity"
-            >
-              Analyze Keyword
-            </button>
-            {showKeywordDropdown && (
-              <div className="absolute right-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 max-h-60 overflow-y-auto">
-                {(keywords ?? []).length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-gray-500">No keywords available</p>
-                ) : (
-                  (keywords ?? []).map((kw) => (
-                    <button
-                      key={kw.id}
-                      onClick={() => handleAnalyzeKeyword(kw.id)}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
-                    >
-                      {kw.keyword}
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-100">AI Insights</h1>
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="px-5 py-2.5 rounded-lg font-medium text-sm bg-indigo-500 text-white hover:bg-indigo-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {generating ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>✨ Generate Market Report</>
+          )}
+        </button>
       </div>
 
-      {/* Insight cards */}
-      {loading && insights.length === 0 ? (
-        <p className="text-sm text-gray-500">Loading insights...</p>
-      ) : insights.length === 0 ? (
+      {/* Description */}
+      <p className="text-sm text-gray-500">
+        Analyzes your last 100 HOT/WATCH listings to find trending niches, winning keywords, design patterns, and opportunities.
+      </p>
+
+      {/* Error */}
+      {error && (
+        <div className="rounded-lg px-4 py-3 text-sm bg-red-500/10 text-red-400 border border-red-500/20">
+          {error}
+        </div>
+      )}
+
+      {/* Reports */}
+      {loading && list.length === 0 ? (
+        <p className="text-sm text-gray-500">Loading...</p>
+      ) : list.length === 0 ? (
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 text-center">
-          <p className="text-gray-500">
-            No AI insights yet. Use the analyze buttons above to generate insights for your shops and keywords.
+          <p className="text-gray-400 text-lg mb-2">No reports yet</p>
+          <p className="text-gray-500 text-sm">
+            Crawl some keywords first, then click "Generate Market Report" to get AI-powered niche analysis.
           </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {insights.map((insight) => (
-            <div
-              key={insight.id}
-              className="bg-gray-900 rounded-xl border border-gray-800 p-6"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${typeStyles[insight.type]}`}
-                  >
-                    {typeLabels[insight.type]}
-                  </span>
-                  <span className="text-sm font-medium text-gray-300">
-                    {insight.target_name}
-                  </span>
+          {list.map((insight) => {
+            let context: any = {};
+            try { context = JSON.parse(insight.data_context || '{}'); } catch {}
+
+            return (
+              <div
+                key={insight.id}
+                className="bg-gray-900 rounded-xl border border-gray-800 p-6"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">📊</span>
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-200">Market Report</h3>
+                      <p className="text-xs text-gray-500">
+                        {context.hotCount ?? 0} HOT · {context.watchCount ?? 0} WATCH · {context.totalListings ?? 0} listings analyzed
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">{formatRelativeTime(insight.created_at)}</p>
+                    <p className="text-xs text-gray-600">{insight.model_used}</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500">
-                    {formatRelativeTime(insight.created_at)}
-                  </span>
-                  <button
-                    className={`text-sm transition-colors ${
-                      insight.is_pinned
-                        ? 'text-yellow-400 hover:text-yellow-300'
-                        : 'text-gray-500 hover:text-gray-300'
-                    }`}
-                    title={insight.is_pinned ? 'Unpin' : 'Pin'}
-                  >
-                    {insight.is_pinned ? '\u2605' : '\u2606'}
-                  </button>
+
+                {/* Content */}
+                <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+                  {insight.content}
                 </div>
               </div>
-              <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-                {insight.content}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

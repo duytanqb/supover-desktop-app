@@ -59,6 +59,17 @@ export function registerAIHandlers(db: Database.Database): void {
     }
   });
 
+  // Market report — single button, analyzes last 100 trending listings
+  ipcMain.handle('ai:market-report', async (_event): Promise<IPCResponse<AIInsight>> => {
+    try {
+      const insight = await aiService.generateMarketReport(db);
+      return { success: true, data: insight };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: message };
+    }
+  });
+
   ipcMain.handle('ai:insights-list', (_event, filters?: { insight_type?: AIInsightType; shop_id?: number; keyword_id?: number; limit?: number; offset?: number }): IPCResponse<AIInsight[]> => {
     try {
       const conditions: string[] = [];
