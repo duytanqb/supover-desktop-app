@@ -3,7 +3,7 @@ import { join } from 'path';
 import { initDatabase } from './services/db.js';
 import { registerAllHandlers } from './ipc/index.js';
 import { logger, initFileLogger } from './utils/logger.js';
-import { createScheduler } from './services/schedulerService.js';
+import { createScheduler, getScheduler as getSchedulerRef } from './services/schedulerService.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -84,8 +84,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  const { getScheduler } = require('./services/schedulerService.js');
-  const scheduler = getScheduler();
-  if (scheduler) scheduler.stop();
+  try {
+    const scheduler = getSchedulerRef();
+    if (scheduler) scheduler.stop();
+  } catch { /* ignore */ }
   logger.info('App quitting');
 });
