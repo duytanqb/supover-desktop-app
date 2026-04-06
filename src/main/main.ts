@@ -9,6 +9,7 @@ let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
+    title: 'Supover App',
     width: 1400,
     height: 900,
     minWidth: 1024,

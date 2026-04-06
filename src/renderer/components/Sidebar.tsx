@@ -32,8 +32,8 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-800">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">🚀</span>
-          <h1 className="text-lg font-bold text-gray-100 tracking-tight">Supover App</h1>
+          <span className="text-2xl">📈</span>
+          <h1 className="text-lg font-bold text-gray-100 tracking-tight">Supover</h1>
         </div>
       </div>
 
