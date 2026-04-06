@@ -49,7 +49,7 @@ async function callAPI(
   model: string
 ): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const timeout = setTimeout(() => controller.abort(), 120000);
 
   try {
     if (provider === 'anthropic') {
@@ -448,32 +448,23 @@ ${topTags.join(', ')}
 ### Top shops with trending products
 ${topShops.join('\n')}
 
-### Top 15 HOT listings (by trending score)
-${hotListings.slice(0, 15).map((l: any, i: number) =>
-  `${i + 1}. "${l.title}" | sold:${l.sold_24h} | views:${l.views_24h} | HEY:${l.hey_score} | age:${l.days_old}d | score:${l.trending_score} | shop:${l.shop_name}`
-).join('\n')}
-
-### Top 10 WATCH listings (potential breakout)
-${watchListings.slice(0, 10).map((l: any, i: number) =>
-  `${i + 1}. "${l.title}" | sold:${l.sold_24h} | views:${l.views_24h} | HEY:${l.hey_score} | age:${l.days_old}d`
+### Top 10 HOT listings
+${hotListings.slice(0, 10).map((l: any, i: number) =>
+  `${i + 1}. "${l.title}" | sold:${l.sold_24h} | views:${l.views_24h} | score:${l.trending_score} | shop:${l.shop_name}`
 ).join('\n')}
 
 ## ANALYZE AND PROVIDE:
 
-1. **HOT Niches Right Now** — What product niches/themes are selling best? Group by theme (e.g., "BTS merch", "book lover", "cat themed"). Rank by strength.
+1. **HOT Niches** — Group HOT listings by theme/niche (e.g. "BTS merch", "book lover", "cat themed"). Rank by number of HOT listings and avg sold_24h.
 
-2. **Trending Keywords** — Which search keywords are producing the most winners? Which are saturated vs. opportunity?
+2. **Hot Keywords** — Which keywords have the most HOT listings? List top 5 with stats.
 
-3. **Design Insights** — What design styles, themes, and formats are working? (e.g., vintage, comfort colors, minimalist, pop culture references)
+3. **Top Sellers** — Which shops dominate? What are they selling?
 
-4. **New Opportunities** — Based on the tags and emerging WATCH listings, what niches should a POD seller explore next?
-
-5. **Recommended Actions** — Top 5 specific things to do this week to capitalize on these trends.
-
-Be specific with product names, themes, and data. This report is for a POD team of 100 sellers.
+Keep it short and data-driven. Use bullet points. No general advice.
 `;
 
-  const systemPrompt = `You are an expert Etsy Print-on-Demand market analyst. You analyze real-time listing data to identify profitable niches, trending designs, and market opportunities. Your reports are actionable, data-driven, and specific. Use bullet points and clear sections. Focus on what to SELL, not general advice.`;
+  const systemPrompt = `You are an Etsy POD market analyst. Analyze listing data, identify hot niches and keywords. Be concise, use bullet points. No general advice, only data-driven observations.`;
 
   logger.info(`Generating market report from ${listings.length} listings with ${config.provider}/${config.model}`);
   const content = await callAPI(prompt, systemPrompt, config.provider, config.apiKey, config.model);
