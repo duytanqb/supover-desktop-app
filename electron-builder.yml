@@ -3,6 +3,10 @@ productName: Supover App
 copyright: Copyright © 2026
 
 asar: true
+asarUnpack:
+  - "node_modules/better-sqlite3/**"
+  - "node_modules/bindings/**"
+  - "node_modules/file-uri-to-path/**"
 
 directories:
   output: release
@@ -10,13 +14,17 @@ directories:
 
 files:
   - dist-electron/**/*
-  - "!node_modules/**/*"
-
-extraResources:
-  - from: node_modules/better-sqlite3/build/Release
-    to: better-sqlite3/build/Release
-    filter:
-      - "*.node"
+  - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
+  - "!node_modules/better-sqlite3/build/Release/obj/**"
+  - "!node_modules/better-sqlite3/build/Release/*.o"
+  - "!node_modules/better-sqlite3/build/Release/.deps"
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!node_modules/better-sqlite3/prebuilds/**"
+  - "!**/{test,tests,__tests__}/**"
+  - "!**/*.{md,ts,map}"
 
 mac:
   target:
