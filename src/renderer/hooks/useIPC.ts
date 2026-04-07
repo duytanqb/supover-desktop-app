@@ -26,6 +26,9 @@ export function useIPC<T = any>(channel: string, autoParams?: any): UseIPCReturn
     lastParamsRef.current = params ?? lastParamsRef.current;
 
     try {
+      if (!window.electron?.ipcRenderer) {
+        throw new Error('IPC not available — app is still loading, please retry');
+      }
       const response: IPCResponse<T> = await window.electron.ipcRenderer.invoke(
         channel,
         lastParamsRef.current

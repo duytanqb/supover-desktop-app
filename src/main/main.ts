@@ -1,6 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron';
 import { join } from 'path';
-import { existsSync } from 'fs';
 import { initDatabase } from './services/db.js';
 import { registerAllHandlers } from './ipc/index.js';
 import { logger, initFileLogger } from './utils/logger.js';
@@ -8,29 +7,7 @@ import { createScheduler, getScheduler as getSchedulerRef } from './services/sch
 
 let mainWindow: BrowserWindow | null = null;
 
-function getPreloadPath(): string {
-  // Try multiple possible paths for the preload script
-  const candidates = [
-    join(__dirname, '../preload/preload.js'),
-    join(__dirname, '..', 'preload', 'preload.js'),
-    join(app.getAppPath(), 'dist-electron', 'preload', 'preload.js'),
-  ];
-
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      logger.info('Preload script found', { path: p });
-      return p;
-    }
-  }
-
-  // Fallback — use first candidate even if not found (let Electron report error)
-  logger.warn('Preload script not found, using default path', { candidates });
-  return candidates[0];
-}
-
 function createWindow(): void {
-  const preloadPath = getPreloadPath();
-
   mainWindow = new BrowserWindow({
     title: 'Supover App',
     width: 1400,
@@ -40,7 +17,7 @@ function createWindow(): void {
     backgroundColor: '#030712',
     show: false,
     webPreferences: {
-      preload: preloadPath,
+      preload: join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
